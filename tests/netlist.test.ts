@@ -18,7 +18,8 @@ const wires: Wire[] = [
   { id: 'w3', from: [6, 0], to: [8, 0] },
   { id: 'w4', from: [8, 0], to: [8, 2] },
   { id: 'w5', from: [0, 6], to: [0, 8] },
-  { id: 'w6', from: [0, 8], to: [8, 8] }, // GND (4,8) bu kablonun ortasına düşüyor (T bağlantı)
+  { id: 'w6', from: [0, 8], to: [4, 8] }, // GND (4,8) kablo ucunda
+  { id: 'w6b', from: [4, 8], to: [8, 8] },
   { id: 'w7', from: [8, 8], to: [8, 6] },
 ];
 
@@ -38,6 +39,22 @@ describe('netlist çıkarma', () => {
     const r = out.result as DCResult;
     expect(r.comps.R2.V).toBeCloseTo(8, 6);
     expect(r.comps.R1.I).toBeCloseTo(4e-3, 9);
+  });
+
+  it('kablo ucu başka kablonun ortasına denk gelirse bağlanır (T bağlantısı)', () => {
+    const ws = wires.filter((w) => w.id !== 'w6' && w.id !== 'w6b');
+    ws.push({ id: 'w6', from: [0, 8], to: [8, 8] }, { id: 'wg', from: [4, 8], to: [4, 9] });
+    const cs = comps.map((c) => (c.id === 'GND1' ? { ...c, y: 9 } : c));
+    const nl = buildNetlist(cs, ws);
+    expect(nl.issues).toEqual([]);
+    expect(nl.pinNodes.GND1[0]).toBe(nl.pinNodes.V1[1]);
+  });
+
+  it('kablonun üstünden geçtiği pin bağlanmaz', () => {
+    const ws = wires.filter((w) => w.id !== 'w6' && w.id !== 'w6b');
+    ws.push({ id: 'w6', from: [0, 8], to: [8, 8] }); // GND (4,8) kablonun ortasında ama kablo orada bitmiyor
+    const nl = buildNetlist(comps, ws);
+    expect(nl.issues.some((i) => /Toprak bileşeni devreye bağlı değil/.test(i.message))).toBe(true);
   });
 
   it('toprak yok uyarısı', () => {

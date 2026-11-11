@@ -68,24 +68,27 @@ export function buildNetlist(components: Component[], wires: Wire[]): Netlist {
   // 1) Her pin ve kablo ucu ızgara noktasıyla anahtarlanır: aynı noktadaki
   //    tüm uçlar otomatik olarak aynı kümededir.
   const pins: Record<string, Pt[]> = {};
-  const points = new Map<string, Pt>();
   for (const c of components) {
     const ps = pinPositions(c);
     pins[c.id] = ps;
     for (const p of ps) {
       uf.find(ptKey(p));
-      points.set(ptKey(p), p);
     }
   }
   // 2) Her kablonun iki ucu birleştirilir.
   for (const w of wires) {
     uf.union(ptKey(w.from), ptKey(w.to));
-    points.set(ptKey(w.from), w.from);
-    points.set(ptKey(w.to), w.to);
   }
-  // 3) Kablo ortasına denk gelen uçlar (T bağlantıları) kabloya katılır.
+  // 3) Bir kablonun UCU başka bir kablonun ortasına denk gelirse (T bağlantısı) birleşir.
+  //    Kablonun üstünden geçtiği pinler ise bağlanmaz: bir pine bağlanmak için kablonun
+  //    o pinde bitmesi gerekir.
+  const wireEnds = new Map<string, Pt>();
   for (const w of wires) {
-    for (const [k, p] of points) {
+    wireEnds.set(ptKey(w.from), w.from);
+    wireEnds.set(ptKey(w.to), w.to);
+  }
+  for (const w of wires) {
+    for (const [k, p] of wireEnds) {
       if (onSegment(p, w.from, w.to)) uf.union(k, ptKey(w.from));
     }
   }

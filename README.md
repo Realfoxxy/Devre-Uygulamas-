@@ -17,7 +17,7 @@ Hiçbir veri sunucuya gitmez.
 - **Rapor:** başlık bloğu, vektör devre şeması, analiz ayarları, sonuç tablosu (ölçülen + % hata),
   düğüm gerilimleri, grafikler ve isteğe bağlı MNA eki içeren A4 PDF. Yalnızca şema: PDF / SVG / PNG.
 - **Dosya:** `.devre` (JSON) indir / aç, tarayıcıda otomatik taslak, hazır örnek devreler.
-- **Düzenleme:** sürükle-bırak, pinden sürükleyerek kablo, döndürme (R), silme (Del), geri al / yinele (Ctrl+Z / Ctrl+Y).
+- **Düzenleme:** sürükle-bırak, pinden sürükleyerek kablo (bileşenlerin üstünden geçmeyen otomatik yol), döndürme (R), silme (Del), geri al / yinele (Ctrl+Z / Ctrl+Y).
 
 ## Kullanım
 
@@ -59,3 +59,7 @@ Worker'da çalışır. LU çözücü testlerde math.js `lusolve` ile karşılaş
 **İşaret kuralı:** pasif işaret kuralı — akım bileşenin `+` ucundan girerse pozitiftir; güç veren kaynakların
 gücü negatif çıkar. AC fazör genlikleri tepe değerdir; ölçülen değer ayarlardan etkin (RMS) ya da tepe
 değerle karşılaştırılır.
+
+**Bağlantı kuralı:** kablo bir pine yalnızca o pinde bittiğinde bağlanır; üstünden geçtiği pinlere bağlanmaz.
+Bir kablonun ucu başka bir kablonun ortasında biterse T bağlantısı oluşur (nokta ile gösterilir).
+Hiçbir şeye bağlı olmayan uçlar turuncu halkayla işaretlenir.

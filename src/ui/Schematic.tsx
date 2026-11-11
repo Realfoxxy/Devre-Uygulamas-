@@ -40,10 +40,12 @@ export function junctionPoints(components: Component[], wires: Wire[]): Pt[] {
     bump(w.from);
     bump(w.to);
   }
+  const ends = new Set(wires.flatMap((w) => [ptKey(w.from), ptKey(w.to)]));
   for (const w of wires)
     for (const [k, p] of pts) {
       const isEnd = ptKey(w.from) === k || ptKey(w.to) === k;
-      if (!isEnd && onSegment(p, w.from, w.to)) count.set(k, (count.get(k) ?? 0) + 2);
+      // yalnızca kablo ucu başka kablonun ortasına denk gelirse bağlantıdır (netlist ile aynı kural)
+      if (!isEnd && ends.has(k) && onSegment(p, w.from, w.to)) count.set(k, (count.get(k) ?? 0) + 2);
     }
   return [...pts.entries()].filter(([k]) => (count.get(k) ?? 0) >= 3).map(([, p]) => p);
 }

@@ -1,6 +1,7 @@
 // SVG çizim alanı: yerleştirme, sürükleme, kablo çizme, seçim, kaydırma ve yakınlaştırma.
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Component, CompType, PARTS, Pt, onSegment, pinPositions, samePt } from '../core/circuit';
+import { Component, CompType, PARTS, Pt, onSegment, pinPositions, ptKey, samePt } from '../core/circuit';
+import { pathToSegments, routeWire } from '../core/route';
 import { isStale, useStore } from '../state/store';
 import { G, PartSymbol, Theme } from './parts/symbols';
 import { Schematic, SEL_COLOR } from './Schematic';
@@ -130,14 +131,15 @@ export function Canvas() {
     if (s.tool === 'select' && !drag.current) setWireStart(null);
   }, [s.tool]);
 
+  const route = useCallback(
+    (a: Pt, b: Pt) => routeWire(a, b, components, wires, Math.abs(b[0] - a[0]) >= Math.abs(b[1] - a[1]) ? 'h' : 'v'),
+    [components, wires],
+  );
+
   const finishWireAt = (p: Pt) => {
     if (!wireStart) return;
     if (samePt(p, wireStart)) return;
-    const corner: Pt = [p[0], wireStart[1]];
-    s.addWires([
-      [wireStart, corner],
-      [corner, p],
-    ]);
+    s.addWires(pathToSegments(route(wireStart, p)));
     // bir bağlantı noktasında bittiyse kabloyu kapat, değilse devam et
     if (isConnection(p)) setWireStart(null);
     else setWireStart(p);
@@ -247,11 +249,7 @@ export function Canvas() {
       const p = snapPt(toGrid(e.clientX, e.clientY));
       if (!samePt(p, d.start)) {
         // pinden sürükleyerek çizildi: tek hamlede bitir
-        const corner: Pt = [p[0], d.start[1]];
-        s.addWires([
-          [d.start, corner],
-          [corner, p],
-        ]);
+        s.addWires(pathToSegments(route(d.start, p)));
         setWireStart(isConnection(p) ? null : p);
       }
     }
@@ -288,6 +286,18 @@ export function Canvas() {
   const ghost: Component | null =
     s.placing && hover ? { id: '_ghost', type: s.placing.type, x: hover[0], y: hover[1], rot: s.placing.rot, params: PARTS[s.placing.type].defaultParams } : null;
   const wireTarget = wireStart && hover ? hover : null;
+  const previewPath = wireStart && wireTarget && !samePt(wireStart, wireTarget) ? route(wireStart, wireTarget) : null;
+  // Hiçbir şeye bağlı olmayan pinler (kullanıcıya görsel uyarı)
+  const openPins = useMemo(() => {
+    const count = new Map<string, number>();
+    const bump = (p: Pt) => count.set(ptKey(p), (count.get(ptKey(p)) ?? 0) + 1);
+    components.forEach((c) => pinPositions(c).forEach(bump));
+    wires.forEach((w) => {
+      bump(w.from);
+      bump(w.to);
+    });
+    return new Set([...count].filter(([, n]) => n === 1).map(([k]) => k));
+  }, [components, wires]);
   const hoveringConn = (s.tool === 'wire' || wireStart) && hover && isConnection(hover);
   const gridSize = G * view.k;
 
@@ -340,14 +350,14 @@ export function Canvas() {
             pinPositions(c).map((p, i) => (
               <g key={`${c.id}-${i}`} data-pin={`${c.id}:${i}`} className="pin">
                 <circle cx={p[0] * G} cy={p[1] * G} r={9} fill="transparent" />
-                <circle cx={p[0] * G} cy={p[1] * G} r={3.2} className="pin-dot" />
+                <circle cx={p[0] * G} cy={p[1] * G} r={3.2} className={`pin-dot ${openPins.has(ptKey(p)) ? 'open' : ''}`} />
               </g>
             )),
           )}
           {/* kablo önizleme */}
-          {wireStart && wireTarget && (
+          {previewPath && (
             <polyline
-              points={`${wireStart[0] * G},${wireStart[1] * G} ${wireTarget[0] * G},${wireStart[1] * G} ${wireTarget[0] * G},${wireTarget[1] * G}`}
+              points={previewPath.map((q) => `${q[0] * G},${q[1] * G}`).join(' ')}
               fill="none"
               stroke={SEL_COLOR}
               strokeWidth={2}

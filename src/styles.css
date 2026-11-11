@@ -132,6 +132,8 @@ kbd {
 .canvas .pin-dot { fill: #fff; stroke: #1d2433; stroke-width: 1.4; opacity: 0; transition: opacity 0.1s; }
 .canvas .pin:hover .pin-dot, .mode-wire .canvas .pin-dot { opacity: 1; }
 .canvas .pin:hover .pin-dot { fill: #16a34a; stroke: #16a34a; }
+/* boştaki uç: her zaman görünür */
+.canvas .pin-dot.open { opacity: 1; fill: #fff; stroke: #d97706; stroke-width: 1.8; }
 
 .stale-banner {
   position: absolute; top: 10px; left: 50%; transform: translateX(-50%);
