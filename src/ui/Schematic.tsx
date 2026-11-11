@@ -22,6 +22,9 @@ export interface SchematicProps {
   errorIds?: Set<string>;
   selectedComp?: string | null;
   selectedWire?: string | null;
+  /** Çoklu seçim */
+  selectedComps?: Set<string>;
+  selectedWires?: Set<string>;
   arrowFor?: string | null;
   interactive?: boolean;
   acMeasure?: 'rms' | 'peak';
@@ -90,7 +93,7 @@ export function Schematic(p: SchematicProps) {
     <g>
       {/* kablolar */}
       {wires.map((w) => {
-        const sel = p.selectedWire === w.id;
+        const sel = p.selectedWire === w.id || !!p.selectedWires?.has(w.id);
         return (
           <g key={w.id} data-wire={interactive ? w.id : undefined} className={interactive ? 'wire' : undefined}>
             {interactive && (
@@ -109,13 +112,13 @@ export function Schematic(p: SchematicProps) {
         );
       })}
       {junctions.map((j) => (
-        <circle key={ptKey(j)} cx={j[0] * G} cy={j[1] * G} r={4} fill={theme.stroke} />
+        <circle key={ptKey(j)} cx={j[0] * G} cy={j[1] * G} r={4} fill={theme.stroke} pointerEvents="none" />
       ))}
 
       {/* bileşenler */}
       {components.map((c) => {
         const err = p.errorIds?.has(c.id);
-        const sel = p.selectedComp === c.id;
+        const sel = p.selectedComp === c.id || !!p.selectedComps?.has(c.id);
         const color = err ? ERR_COLOR : sel ? SEL_COLOR : undefined;
         let extra: string | undefined;
         if (results && (c.type === 'VM' || c.type === 'AM' || (p.arrowFor === c.id && !p.stale))) {

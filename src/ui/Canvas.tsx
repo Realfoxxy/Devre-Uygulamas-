@@ -32,9 +32,29 @@ interface View {
 
 type Drag =
   | { kind: 'comp'; id: string; start: Pt; orig: Pt; ends: { wireId: string; end: 'from' | 'to'; dx: number; dy: number }[]; began: boolean }
-  | { kind: 'pan'; sx: number; sy: number; orig: View }
+  | {
+      kind: 'group';
+      start: Pt;
+      comps: Record<string, Pt>;
+      wires: Record<string, [Pt, Pt]>;
+      ends: { wireId: string; end: 'from' | 'to'; orig: Pt }[];
+      began: boolean;
+    }
+  | { kind: 'pan'; sx: number; sy: number; orig: View; button: number; moved: boolean }
+  | { kind: 'box'; start: Pt; cur: Pt; add: boolean }
+  | { kind: 'wirePending'; wireId: string; start: Pt; add: boolean }
   | { kind: 'wire'; start: Pt }
   | null;
+
+/** Grid noktasını kablonun üzerine izdüşür (yatay / dikey kablolar). */
+function projectOnWire(p: Pt, w: { from: Pt; to: Pt }): Pt {
+  const [a, b] = [w.from, w.to];
+  const clamp = (v: number, x: number, y: number) => Math.max(Math.min(x, y), Math.min(Math.max(x, y), v));
+  if (a[1] === b[1]) return [clamp(p[0], a[0], b[0]), a[1]];
+  if (a[0] === b[0]) return [a[0], clamp(p[1], a[1], b[1])];
+  // çapraz kablo: en yakın uç
+  return Math.hypot(p[0] - a[0], p[1] - a[1]) <= Math.hypot(p[0] - b[0], p[1] - b[1]) ? a : b;
+}
 
 export function Canvas() {
   const svgRef = useRef<SVGSVGElement>(null);
@@ -47,6 +67,9 @@ export function Canvas() {
   const lastDownComp = useRef<string | null>(null);
   const pointers = useRef(new Map<number, { x: number; y: number }>());
   const pinch = useRef<{ d: number; view: View; cx: number; cy: number } | null>(null);
+  /** Sağ tuşla sürükleyip kaydırdıysa bağlam menüsü iptal işlemini yapmasın */
+  const rightPanned = useRef(false);
+  const [box, setBox] = useState<{ a: Pt; b: Pt } | null>(null);
 
   const s = useStore();
   const { components, wires } = s.doc;
@@ -145,16 +168,60 @@ export function Canvas() {
     else setWireStart(p);
   };
 
+  /** Mevcut seçim (tekli ya da çoklu) kümeleri */
+  const currentSets = () => {
+    const st = useStore.getState();
+    const comps = new Set(st.group?.comps ?? (st.selection?.kind === 'comp' ? [st.selection.id] : []));
+    const ws = new Set(st.group?.wires ?? (st.selection?.kind === 'wire' ? [st.selection.id] : []));
+    return { comps, ws };
+  };
+
+  const toggleInGroup = (kind: 'comp' | 'wire', id: string) => {
+    const { comps, ws } = currentSets();
+    const set = kind === 'comp' ? comps : ws;
+    if (set.has(id)) set.delete(id);
+    else set.add(id);
+    s.setGroup({ comps: [...comps], wires: [...ws] });
+  };
+
+  /** Seçili bileşen ve kabloları birlikte taşımak için başlangıç durumu */
+  const startGroupDrag = (p: Pt, compIds: Set<string>, wireIds: Set<string>) => {
+    const comps: Record<string, Pt> = {};
+    const pinKeys = new Set<string>();
+    for (const c of components)
+      if (compIds.has(c.id)) {
+        comps[c.id] = [c.x, c.y];
+        pinPositions(c).forEach((q) => pinKeys.add(ptKey(q)));
+      }
+    const ws: Record<string, [Pt, Pt]> = {};
+    const ends: Extract<Drag, { kind: 'group' }>['ends'] = [];
+    for (const w of wires) {
+      if (wireIds.has(w.id)) ws[w.id] = [w.from, w.to];
+      else
+        for (const end of ['from', 'to'] as const) if (pinKeys.has(ptKey(w[end]))) ends.push({ wireId: w.id, end, orig: w[end] });
+    }
+    drag.current = { kind: 'group', start: p, comps, wires: ws, ends, began: false };
+  };
+
   const onPointerDown = (e: React.PointerEvent<SVGSVGElement>) => {
     pointers.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
     if (pointers.current.size === 2) {
       const [a, b] = [...pointers.current.values()];
       pinch.current = { d: Math.hypot(a.x - b.x, a.y - b.y), view, cx: (a.x + b.x) / 2, cy: (a.y + b.y) / 2 };
       drag.current = null;
+      setBox(null);
       return;
     }
-    if (e.button === 2) return;
-    const p = snapPt(toGrid(e.clientX, e.clientY));
+    // Sağ / orta tuş: haritayı kaydır
+    if (e.button === 2 || e.button === 1) {
+      e.preventDefault();
+      (e.currentTarget as SVGSVGElement).setPointerCapture(e.pointerId);
+      rightPanned.current = false;
+      drag.current = { kind: 'pan', sx: e.clientX, sy: e.clientY, orig: view, button: e.button, moved: false };
+      return;
+    }
+    const raw = toGrid(e.clientX, e.clientY);
+    const p = snapPt(raw);
     const target = e.target as Element;
     const pinEl = target.closest('[data-pin]');
     const compEl = target.closest('[data-comp]');
@@ -173,14 +240,28 @@ export function Canvas() {
       if (wireStart) {
         finishWireAt(p);
       } else {
-        setWireStart(p);
-        drag.current = { kind: 'wire', start: p };
+        // kablo modunda bir kablonun üstüne tıklandıysa nokta o kablonun üzerine oturur
+        const w = wireEl ? wires.find((ww) => ww.id === wireEl.getAttribute('data-wire')) : undefined;
+        const start = w && !pinEl ? projectOnWire(p, w) : p;
+        setWireStart(start);
+        drag.current = { kind: 'wire', start };
       }
       return;
     }
 
+    const { comps: selC, ws: selW } = currentSets();
+    const add = e.shiftKey || e.ctrlKey || e.metaKey;
+
     if (compEl) {
       const id = compEl.getAttribute('data-comp')!;
+      if (add) {
+        toggleInGroup('comp', id);
+        return;
+      }
+      if (s.group && selC.has(id)) {
+        startGroupDrag(p, selC, selW);
+        return;
+      }
       const c = components.find((cc) => cc.id === id)!;
       s.select({ kind: 'comp', id });
       const pins = pinPositions(c);
@@ -195,11 +276,28 @@ export function Canvas() {
       return;
     }
     if (wireEl) {
-      s.select({ kind: 'wire', id: wireEl.getAttribute('data-wire')! });
+      const id = wireEl.getAttribute('data-wire')!;
+      if (add) {
+        toggleInGroup('wire', id);
+        return;
+      }
+      if (s.group && selW.has(id)) {
+        startGroupDrag(p, selC, selW);
+        return;
+      }
+      // Tıklama kabloyu seçer; sürükleme o noktadan yeni bir kablo başlatır (T bağlantısı)
+      const w = wires.find((ww) => ww.id === id)!;
+      drag.current = { kind: 'wirePending', wireId: id, start: projectOnWire(p, w), add };
       return;
     }
-    s.select(null);
-    drag.current = { kind: 'pan', sx: e.clientX, sy: e.clientY, orig: view };
+    // Boş alan: fareyle sürükleme alan seçer, dokunmatikte kaydırır
+    if (e.pointerType === 'touch') {
+      s.select(null);
+      drag.current = { kind: 'pan', sx: e.clientX, sy: e.clientY, orig: view, button: 0, moved: false };
+      return;
+    }
+    if (!add) s.select(null);
+    drag.current = { kind: 'box', start: raw, cur: raw, add };
   };
 
   const onPointerMove = (e: React.PointerEvent<SVGSVGElement>) => {
@@ -228,8 +326,38 @@ export function Canvas() {
       }
       if (d.began) s.moveComponent(d.id, d.orig[0] + dx, d.orig[1] + dy, d.ends);
       setTip(null);
+    } else if (d?.kind === 'group') {
+      const dx = p[0] - d.start[0];
+      const dy = p[1] - d.start[1];
+      if (!d.began && (dx || dy)) {
+        d.began = true;
+        s.beginChange();
+      }
+      if (d.began) {
+        const cp: Record<string, Pt> = {};
+        for (const [id, [x, y]] of Object.entries(d.comps)) cp[id] = [x + dx, y + dy];
+        const wp: Record<string, { from?: Pt; to?: Pt }> = {};
+        for (const [id, [a, b]] of Object.entries(d.wires)) wp[id] = { from: [a[0] + dx, a[1] + dy], to: [b[0] + dx, b[1] + dy] };
+        for (const en of d.ends) (wp[en.wireId] ??= {})[en.end] = [en.orig[0] + dx, en.orig[1] + dy];
+        s.setPositions(cp, wp);
+      }
+      setTip(null);
     } else if (d?.kind === 'pan') {
+      if (Math.abs(e.clientX - d.sx) + Math.abs(e.clientY - d.sy) > 3) {
+        d.moved = true;
+        if (d.button === 2) rightPanned.current = true;
+      }
       setView({ ...d.orig, x: d.orig.x + e.clientX - d.sx, y: d.orig.y + e.clientY - d.sy });
+    } else if (d?.kind === 'box') {
+      d.cur = raw;
+      setBox({ a: d.start, b: raw });
+    } else if (d?.kind === 'wirePending') {
+      const w = wires.find((ww) => ww.id === d.wireId);
+      if (w && !samePt(p, d.start)) {
+        // sürükleme başladı: kablonun üzerindeki noktadan yeni kablo
+        setWireStart(d.start);
+        drag.current = { kind: 'wire', start: d.start };
+      }
     } else if (!d) {
       // ipucu
       const compEl = (e.target as Element).closest('[data-comp]');
@@ -248,10 +376,28 @@ export function Canvas() {
     if (d?.kind === 'wire') {
       const p = snapPt(toGrid(e.clientX, e.clientY));
       if (!samePt(p, d.start)) {
-        // pinden sürükleyerek çizildi: tek hamlede bitir
+        // sürükleyerek çizildi: tek hamlede bitir
         s.addWires(pathToSegments(route(d.start, p)));
         setWireStart(isConnection(p) ? null : p);
       }
+    } else if (d?.kind === 'wirePending') {
+      s.select({ kind: 'wire', id: d.wireId });
+    } else if (d?.kind === 'box') {
+      setBox(null);
+      const x0 = Math.min(d.start[0], d.cur[0]);
+      const x1 = Math.max(d.start[0], d.cur[0]);
+      const y0 = Math.min(d.start[1], d.cur[1]);
+      const y1 = Math.max(d.start[1], d.cur[1]);
+      if (x1 - x0 < 0.3 && y1 - y0 < 0.3) return; // sadece tıklama
+      const inside = (q: Pt) => q[0] >= x0 && q[0] <= x1 && q[1] >= y0 && q[1] <= y1;
+      const comps = components.filter((c) => inside([c.x, c.y])).map((c) => c.id);
+      const ws = wires.filter((w) => inside(w.from) && inside(w.to)).map((w) => w.id);
+      if (d.add) {
+        const cur = currentSets();
+        comps.forEach((c) => cur.comps.add(c));
+        ws.forEach((w) => cur.ws.add(w));
+        s.setGroup({ comps: [...cur.comps], wires: [...cur.ws] });
+      } else s.setGroup({ comps, wires: ws });
     }
   };
 
@@ -281,6 +427,8 @@ export function Canvas() {
   };
 
   const selectedComp = s.selection?.kind === 'comp' ? s.selection.id : null;
+  const groupComps = useMemo(() => new Set(s.group?.comps ?? []), [s.group]);
+  const groupWires = useMemo(() => new Set(s.group?.wires ?? []), [s.group]);
   const tipComp = tip ? components.find((c) => c.id === tip.id) : null;
   const tipData = tipComp && s.results ? compDisplay(s.results, tipComp.id, tipComp.type, s.tIndex, s.doc.analysis.acMeasure) : null;
   const ghost: Component | null =
@@ -318,9 +466,15 @@ export function Canvas() {
         onDoubleClick={onDoubleClick}
         onContextMenu={(e) => {
           e.preventDefault();
+          if (rightPanned.current) {
+            rightPanned.current = false;
+            return;
+          }
+          // sağ tık (sürüklemeden): kabloyu / yerleştirmeyi iptal et
           setWireStart(null);
           if (s.placing) s.setPlacing(null);
         }}
+        onAuxClick={(e) => e.preventDefault()}
       >
         <defs>
           <pattern id="grid" width={gridSize} height={gridSize} patternUnits="userSpaceOnUse" x={view.x % gridSize} y={view.y % gridSize}>
@@ -341,6 +495,8 @@ export function Canvas() {
             errorIds={errorIds}
             selectedComp={selectedComp}
             selectedWire={s.selection?.kind === 'wire' ? s.selection.id : null}
+            selectedComps={groupComps}
+            selectedWires={groupWires}
             arrowFor={selectedComp}
             acMeasure={s.doc.analysis.acMeasure}
             interactive
@@ -374,6 +530,18 @@ export function Canvas() {
               fill="none"
               stroke={hoveringConn ? '#16a34a' : SEL_COLOR}
               strokeWidth={2}
+              pointerEvents="none"
+            />
+          )}
+          {box && (
+            <rect
+              x={Math.min(box.a[0], box.b[0]) * G}
+              y={Math.min(box.a[1], box.b[1]) * G}
+              width={Math.abs(box.b[0] - box.a[0]) * G}
+              height={Math.abs(box.b[1] - box.a[1]) * G}
+              fill="rgba(37,87,214,0.08)"
+              stroke={SEL_COLOR}
+              strokeDasharray="5 4"
               pointerEvents="none"
             />
           )}

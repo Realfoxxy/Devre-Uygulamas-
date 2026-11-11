@@ -5,6 +5,7 @@ import { ExportDialog } from './ui/ExportDialog';
 import { Palette } from './ui/Palette';
 import { Plots } from './ui/Plots';
 import { ResultPanel } from './ui/ResultPanel';
+import { Splitter, usePersistentSize } from './ui/Splitter';
 import { Toolbar } from './ui/Toolbar';
 
 export default function App() {
@@ -12,6 +13,10 @@ export default function App() {
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [panelOpen, setPanelOpen] = useState(false);
   const [plotsOpen, setPlotsOpen] = useState(false);
+  const [leftW, setLeftW] = usePersistentSize('sol', 210);
+  const [rightW, setRightW] = usePersistentSize('sag', 340);
+  const [plotsH, setPlotsH] = usePersistentSize('grafik', 300);
+  const maxSide = () => Math.max(260, window.innerWidth * 0.45);
   const results = useStore((s) => s.results);
   const toast = useStore((s) => s.toast);
   const selection = useStore((s) => s.selection);
@@ -39,6 +44,9 @@ export default function App() {
       } else if (ctrl && (e.key.toLowerCase() === 'y' || (e.key.toLowerCase() === 'z' && e.shiftKey))) {
         e.preventDefault();
         s.redo();
+      } else if (ctrl && e.key.toLowerCase() === 'a') {
+        e.preventDefault();
+        s.selectAll();
       } else if (ctrl && e.key.toLowerCase() === 's') {
         e.preventDefault();
         import('./storage/project').then((m) => m.downloadProject(s.doc));
@@ -57,6 +65,7 @@ export default function App() {
       } else if (e.key === 'Escape') {
         s.setPlacing(null);
         s.setTool('select');
+        s.select(null);
       }
     };
     window.addEventListener('keydown', h);
@@ -70,19 +79,24 @@ export default function App() {
         onTogglePalette={() => setPaletteOpen((v) => !v)}
         onTogglePanel={() => setPanelOpen((v) => !v)}
       />
-      <div className="main">
+      <div className="main" style={{ '--left-w': `${leftW}px`, '--right-w': `${rightW}px`, '--plots-h': `${plotsH}px` } as React.CSSProperties}>
         <aside className={`left drawer ${paletteOpen ? 'open' : ''}`}>
           <Palette onPicked={() => setPaletteOpen(false)} />
         </aside>
+        <Splitter dir="x" sign={1} value={leftW} min={150} max={maxSide} onChange={setLeftW} onReset={() => setLeftW(210)} label="Bileşen paneli genişliği" />
         <section className="center">
           <Canvas />
           <div className={`plots-dock ${plotsOpen ? 'open' : ''}`}>
+            {plotsOpen && (
+              <Splitter dir="y" sign={-1} value={plotsH} min={140} max={() => window.innerHeight * 0.75} onChange={setPlotsH} onReset={() => setPlotsH(300)} label="Grafik paneli yüksekliği" />
+            )}
             <button className="plots-toggle" onClick={() => setPlotsOpen((v) => !v)}>
               {plotsOpen ? '▾' : '▴'} Grafikler
             </button>
             {plotsOpen && <Plots />}
           </div>
         </section>
+        <Splitter dir="x" sign={-1} value={rightW} min={260} max={maxSide} onChange={setRightW} onReset={() => setRightW(340)} label="Sonuç paneli genişliği" />
         <aside className={`right drawer ${panelOpen ? 'open' : ''}`}>
           <button className="drawer-close only-mobile" onClick={() => setPanelOpen(false)} aria-label="Kapat">✕</button>
           <ResultPanel />

@@ -308,6 +308,7 @@ export function ResultPanel() {
   const comp = useStore((s) => (s.selection?.kind === 'comp' ? s.doc.components.find((c) => c.id === s.selection!.id) : undefined));
   const showSolution = useStore((s) => s.showSolution);
   const del = useStore((s) => s.deleteSelection);
+  const group = useStore((s) => s.group);
   const [tab, setTab] = useState<'props' | 'solution'>('props');
   useEffect(() => {
     if (!showSolution) setTab('props');
@@ -328,6 +329,20 @@ export function ResultPanel() {
       <Issues />
       {tab === 'solution' && showSolution ? (
         <SolutionView />
+      ) : group ? (
+        <div className="editor">
+          <span className="badge">Çoklu seçim</span>
+          <p>
+            <b>{group.comps.length}</b> bileşen, <b>{group.wires.length}</b> kablo seçili.
+          </p>
+          {group.comps.length > 0 && <p className="muted small">{group.comps.join(', ')}</p>}
+          <p className="muted small">
+            Seçili bir öğeyi sürükleyerek hepsini birlikte taşıyın. Shift + tık ile seçime ekleyip çıkarabilirsiniz.
+          </p>
+          <button className="btn danger" onClick={del}>
+            Seçilenleri sil
+          </button>
+        </div>
       ) : comp ? (
         <>
           <ParamEditor comp={comp} />

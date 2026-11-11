@@ -66,6 +66,11 @@ export function Palette({ onPicked }: { onPicked?: () => void }) {
       <div className="palette-help">
         <div className="panel-title">Kısayollar</div>
         <ul>
+          <li>Sol tık sürükle: alan seç</li>
+          <li>Sağ tık sürükle: haritayı kaydır</li>
+          <li><kbd>Shift</kbd>+tık: seçime ekle / çıkar</li>
+          <li>Kablodan sürükle: yeni kablo (T bağlantısı)</li>
+          <li><kbd>Ctrl</kbd>+<kbd>A</kbd> tümünü seç</li>
           <li><kbd>R</kbd> döndür</li>
           <li><kbd>W</kbd> kablo modu</li>
           <li><kbd>Del</kbd> sil</li>

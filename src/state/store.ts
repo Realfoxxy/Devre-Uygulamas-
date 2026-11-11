@@ -26,12 +26,15 @@ interface Snapshot {
 }
 
 export type Selection = { kind: 'comp' | 'wire'; id: string } | null;
+/** Alan seçimi / Shift+tık ile oluşan çoklu seçim */
+export type Group = { comps: string[]; wires: string[] } | null;
 
 export interface AppState {
   doc: CircuitDoc;
   past: Snapshot[];
   future: Snapshot[];
   selection: Selection;
+  group: Group;
   tool: 'select' | 'wire';
   placing: { type: CompType; rot: number } | null;
   /** Devre her değiştiğinde artar; sonuçların güncel olup olmadığını belirler */
@@ -54,6 +57,11 @@ export interface AppState {
   setTool: (t: AppState['tool']) => void;
   setPlacing: (p: AppState['placing']) => void;
   select: (s: Selection) => void;
+  /** Çoklu seçimi ayarlar; tek bileşen kalırsa normal seçime döner */
+  setGroup: (g: Group) => void;
+  /** Bileşen / kablo konumlarını topluca yazar (geri alma adımı beginChange ile açılır) */
+  setPositions: (comps: Record<string, Pt>, wires: Record<string, { from?: Pt; to?: Pt }>) => void;
+  selectAll: () => void;
   addComponent: (type: CompType, x: number, y: number, rot?: number) => string;
   /** Sürükleme başlarken çağrılır (tek bir geri alma adımı) */
   beginChange: () => void;
@@ -118,6 +126,7 @@ export const useStore = create<AppState>((set, get) => {
     past: [],
     future: [],
     selection: null,
+    group: null,
     tool: 'select',
     placing: null,
     version: 1,
@@ -135,7 +144,25 @@ export const useStore = create<AppState>((set, get) => {
 
     setTool: (tool) => set({ tool, placing: null }),
     setPlacing: (placing) => set({ placing, tool: 'select' }),
-    select: (selection) => set({ selection }),
+    select: (selection) => set({ selection, group: null }),
+    setGroup: (g) => {
+      if (!g || (g.comps.length === 0 && g.wires.length === 0)) return set({ group: null, selection: null });
+      if (g.comps.length === 1 && g.wires.length === 0) return set({ group: null, selection: { kind: 'comp', id: g.comps[0] } });
+      if (g.comps.length === 0 && g.wires.length === 1) return set({ group: null, selection: { kind: 'wire', id: g.wires[0] } });
+      set({ group: g, selection: null });
+    },
+    setPositions: (cp, wp) =>
+      commit(
+        (d) => ({
+          components: d.components.map((c) => (cp[c.id] ? { ...c, x: cp[c.id][0], y: cp[c.id][1] } : c)),
+          wires: d.wires.map((w) => (wp[w.id] ? { ...w, from: wp[w.id].from ?? w.from, to: wp[w.id].to ?? w.to } : w)),
+        }),
+        false,
+      ),
+    selectAll: () => {
+      const d = get().doc;
+      get().setGroup({ comps: d.components.map((c) => c.id), wires: d.wires.map((w) => w.id) });
+    },
 
     addComponent: (type, x, y, rot) => {
       const id = nextId(type, get().doc.components);
@@ -236,7 +263,14 @@ export const useStore = create<AppState>((set, get) => {
     },
 
     deleteSelection: () => {
-      const sel = get().selection;
+      const { selection: sel, group } = get();
+      if (group) {
+        const cs = new Set(group.comps);
+        const ws = new Set(group.wires);
+        commit((d) => ({ components: d.components.filter((c) => !cs.has(c.id)), wires: d.wires.filter((w) => !ws.has(w.id)) }));
+        set({ group: null, selection: null });
+        return;
+      }
       if (!sel) return;
       commit((d) =>
         sel.kind === 'comp'
@@ -256,6 +290,7 @@ export const useStore = create<AppState>((set, get) => {
         future: [snap(s.doc), ...s.future],
         version: s.version + 1,
         selection: null,
+        group: null,
       });
     },
     redo: () => {
@@ -268,6 +303,7 @@ export const useStore = create<AppState>((set, get) => {
         future: s.future.slice(1),
         version: s.version + 1,
         selection: null,
+        group: null,
       });
     },
 
@@ -279,6 +315,7 @@ export const useStore = create<AppState>((set, get) => {
         future: [],
         version: s.version + 1,
         selection: null,
+        group: null,
         results: null,
         issues: [],
         plotted: [],
@@ -292,6 +329,7 @@ export const useStore = create<AppState>((set, get) => {
         future: [],
         version: s.version + 1,
         selection: null,
+        group: null,
         results: null,
         issues: [],
         tIndex: null,

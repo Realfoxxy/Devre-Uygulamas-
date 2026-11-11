@@ -17,7 +17,7 @@ Hiçbir veri sunucuya gitmez.
 - **Rapor:** başlık bloğu, vektör devre şeması, analiz ayarları, sonuç tablosu (ölçülen + % hata),
   düğüm gerilimleri, grafikler ve isteğe bağlı MNA eki içeren A4 PDF. Yalnızca şema: PDF / SVG / PNG.
 - **Dosya:** `.devre` (JSON) indir / aç, tarayıcıda otomatik taslak, hazır örnek devreler.
-- **Düzenleme:** sürükle-bırak, pinden sürükleyerek kablo (bileşenlerin üstünden geçmeyen otomatik yol), döndürme (R), silme (Del), geri al / yinele (Ctrl+Z / Ctrl+Y).
+- **Düzenleme:** sürükle-bırak, pinden ya da mevcut bir kablodan sürükleyerek kablo (bileşenlerin üstünden geçmeyen otomatik yol), sol tuşla alan seçip toplu taşıma / silme (`Shift`+tık seçime ekler, `Ctrl+A` tümü), sağ tuşla sürükleyerek kaydırma, kenarlarından sürüklenerek boyutlandırılan paneller, döndürme (R), silme (Del), geri al / yinele (Ctrl+Z / Ctrl+Y).
 
 ## Kullanım
 
