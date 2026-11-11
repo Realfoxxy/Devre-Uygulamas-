@@ -1,5 +1,7 @@
 # Devre Lab Simülatörü
 
+**Uygulamayı aç: https://realfoxxy.github.io/Devre-Uygulamas-/**
+
 Öğrencinin devreyi ekranda çizdiği, her bileşenin gerilim ve akımını tıklayarak gördüğü ve sonucu
 PDF rapor olarak aldığı, tarayıcıda çalışan bir devre simülatörü. Kurulum gerektirmez; telefonda da açılır.
 Hiçbir veri sunucuya gitmez.
@@ -63,3 +65,7 @@ değerle karşılaştırılır.
 **Bağlantı kuralı:** kablo bir pine yalnızca o pinde bittiğinde bağlanır; üstünden geçtiği pinlere bağlanmaz.
 Bir kablonun ucu başka bir kablonun ortasında biterse T bağlantısı oluşur (nokta ile gösterilir).
 Hiçbir şeye bağlı olmayan uçlar turuncu halkayla işaretlenir.
+
+## Lisans
+
+Açık kaynak — [MIT Lisansı](LICENSE). Kullanabilir, değiştirebilir ve paylaşabilirsiniz.
