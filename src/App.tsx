@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { useStore } from './state/store';
 import { Canvas } from './ui/Canvas';
 import { ExportDialog } from './ui/ExportDialog';
+import { MobileBar } from './ui/MobileBar';
 import { Palette } from './ui/Palette';
 import { Plots } from './ui/Plots';
 import { ResultPanel } from './ui/ResultPanel';
@@ -19,17 +20,20 @@ export default function App() {
   const maxSide = () => Math.max(260, window.innerWidth * 0.45);
   const results = useStore((s) => s.results);
   const toast = useStore((s) => s.toast);
-  const selection = useStore((s) => s.selection);
 
   // Grafik üreten bir analizden sonra alt paneli aç
   useEffect(() => {
     if (results && (results.kind === 'transient' || (results.kind === 'ac' && results.sweep))) setPlotsOpen(true);
   }, [results]);
 
-  // Telefonda bileşen seçilince sonuç çekmecesini aç
+  // Telefonda çift dokunuşla bileşen düzenleme çekmecesini aç
   useEffect(() => {
-    if (selection && window.matchMedia('(max-width: 900px)').matches && results) setPanelOpen(true);
-  }, [selection, results]);
+    const h = () => {
+      if (window.matchMedia('(max-width: 900px)').matches) setPanelOpen(true);
+    };
+    window.addEventListener('devre:edit-value', h);
+    return () => window.removeEventListener('devre:edit-value', h);
+  }, []);
 
   // Klavye kısayolları
   useEffect(() => {
@@ -86,6 +90,11 @@ export default function App() {
         <Splitter dir="x" sign={1} value={leftW} min={150} max={maxSide} onChange={setLeftW} onReset={() => setLeftW(210)} label="Bileşen paneli genişliği" />
         <section className="center">
           <Canvas />
+          {!panelOpen && (
+            <div className="only-mobile-block">
+              <MobileBar onDetails={() => setPanelOpen(true)} />
+            </div>
+          )}
           <div className={`plots-dock ${plotsOpen ? 'open' : ''}`}>
             {plotsOpen && (
               <Splitter dir="y" sign={-1} value={plotsH} min={140} max={() => window.innerHeight * 0.75} onChange={setPlotsH} onReset={() => setPlotsH(300)} label="Grafik paneli yüksekliği" />

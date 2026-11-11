@@ -267,6 +267,19 @@ kbd {
 .toast { position: fixed; bottom: 18px; left: 50%; transform: translateX(-50%); background: #1d2433; color: #fff; padding: 8px 14px; border-radius: 8px; z-index: 200; font-size: 13px; }
 
 .only-mobile { display: none; }
+.only-mobile-block { display: none; }
+.mobile-bar {
+  border-top: 1px solid var(--line); background: var(--panel); padding: 10px 12px calc(10px + env(safe-area-inset-bottom, 0px));
+  display: flex; flex-direction: column; gap: 8px; box-shadow: 0 -6px 20px rgba(20, 30, 50, 0.08);
+}
+.mb-head { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.mb-head .icon-btn { margin-left: auto; }
+.mb-desc { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+.mb-field { display: grid; grid-template-columns: 90px 1fr; align-items: center; gap: 8px; font-size: 14px; }
+.mb-field .value-input input { font-size: 16px; padding: 8px; }
+.mb-actions { display: flex; gap: 6px; }
+.mb-actions .btn { padding: 9px 12px; }
+.mb-actions .btn.primary { margin-left: auto; }
 .drawer-close { position: absolute; right: 8px; top: 8px; z-index: 2; }
 
 @media (max-width: 1200px) {
@@ -276,6 +289,9 @@ kbd {
 /* Telefon / tablet: palet ve sağ panel kenardan açılan çekmecelere dönüşür */
 @media (max-width: 900px) {
   .only-mobile { display: inline-flex; align-items: center; justify-content: center; }
+  .only-mobile-block { display: block; }
+  /* telefonda giriş kutuları 16px: iOS odaklanınca sayfayı yakınlaştırmasın */
+  .value-input input, .name-input, .form input { font-size: 16px; }
   .main { grid-template-columns: minmax(0, 1fr); }
   .splitter { display: none; }
   .drawer { position: fixed; top: 0; bottom: 0; z-index: 60; width: min(340px, 88vw); transition: transform 0.2s ease; box-shadow: 0 0 40px rgba(0,0,0,0.18); }
