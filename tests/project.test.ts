@@ -24,6 +24,7 @@ describe('.devre proje dosyası', () => {
       "version": 1, "meta": { "deney": "RC Devresi Şarj", "tarih": "2026-11-11" },
       "components": [
         { "id": "V1", "type": "V", "x": 100, "y": 200, "rot": 90, "params": { "mode": "DC", "value": 12 } },
+        { "id": "C1", "type": "C", "x": 300, "y": 200, "rot": 90, "params": { "value": 100e-6, "v0": 0 } },
         { "id": "GND1", "type": "GND", "x": 100, "y": 300, "rot": 0, "params": {} }
       ],
       "wires": [ { "from": [100, 160], "to": [160, 100] } ],
@@ -35,6 +36,24 @@ describe('.devre proje dosyası', () => {
     expect(doc.analysis.type).toBe('transient');
     expect(doc.analysis.tStop).toBe(0.5);
     expect(doc.measured.C1.V).toBe(7.5);
+  });
+
+  it('kötü niyetli / bozuk alanları temizler ya da reddeder', () => {
+    const base = (comps: string) => `{"version":1,"components":[${comps}],"wires":[]}`;
+    // bilinmeyen alanlar atılır, sayısal olmayan değer varsayılana döner
+    const d = deserialize(base('{"id":"R1","type":"R","x":1,"y":2,"rot":0,"params":{"value":"<img onerror=x>","evil":1},"html":"<b>"}'));
+    expect(d.components[0].params).toEqual({ value: 1000 });
+    expect((d.components[0] as unknown as Record<string, unknown>).html).toBeUndefined();
+    // geçersiz isim
+    expect(() => deserialize(base('{"id":"<script>","type":"R","x":0,"y":0}'))).toThrow(/Geçersiz bileşen adı/);
+    expect(() => deserialize(base('{"id":"R12345678901234567","type":"R","x":0,"y":0}'))).toThrow(/16/);
+    // sonsuz / devasa koordinat
+    expect(() => deserialize(base('{"id":"R1","type":"R","x":1e300,"y":0}'))).toThrow(/koordinat/);
+    // çok fazla bileşen
+    const many = Array.from({ length: 501 }, (_, i) => `{"id":"R${i}","type":"R","x":0,"y":0}`).join(',');
+    expect(() => deserialize(base(many))).toThrow(/çok fazla/);
+    // aynı isim iki kez
+    expect(() => deserialize(base('{"id":"R1","type":"R","x":0,"y":0},{"id":"R1","type":"R","x":4,"y":0}'))).toThrow(/Aynı isimde/);
   });
 
   it('eski / bozuk dosyaları reddeder', () => {

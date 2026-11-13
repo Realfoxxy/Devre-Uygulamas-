@@ -234,7 +234,7 @@ export const useStore = create<AppState>((set, get) => {
     renameComponent: (id, newIdRaw) => {
       const newId = newIdRaw.trim();
       if (!newId || newId === id) return null;
-      if (!/^[A-Za-z][A-Za-z0-9_]*$/.test(newId)) return 'İsim harfle başlamalı; yalnızca harf, rakam ve _ içerebilir.';
+      if (!/^[A-Za-z][A-Za-z0-9]{0,15}$/.test(newId)) return 'İsim harfle başlamalı; en fazla 16 harf ve rakam içerebilir.';
       if (get().doc.components.some((c) => c.id === newId)) return 'Bu isim zaten kullanılıyor.';
       commit((d) => {
         const measured = { ...d.measured };
