@@ -18,6 +18,10 @@ export interface Params {
   v0?: number;
   /** Bobin başlangıç akımı (A) */
   i0?: number;
+  /** Bağımlı kaynak kazancı (A, R_m, G ya da B) */
+  gain?: number;
+  /** Bağımlı kaynağın kontrol büyüklüğü: başka bir bileşenin gerilimi (V) ya da akımı (I) */
+  ctrl?: { ref: string; kind: 'V' | 'I' };
 }
 
 export interface Component {

@@ -175,12 +175,18 @@ export function buildNetlist(components: Component[], wires: Wire[]): Netlist {
 
   // Doğrulama: parametreler
   for (const e of elements) {
-    if ((e.type === 'R' || e.type === 'C' || e.type === 'L') && !(Number(e.params.value) > 0)) {
-      issues.push({
-        level: 'error',
-        message: `${e.id}: değer sıfırdan büyük olmalı.`,
-        compIds: [e.id],
-      });
+    if (e.type === 'R' || e.type === 'C' || e.type === 'L') {
+      const v = Number(e.params.value);
+      const what = e.type === 'R' ? 'direnç' : e.type === 'C' ? 'kapasitans' : 'indüktans';
+      if (!(v > 0) || !Number.isFinite(v)) {
+        issues.push({ level: 'error', message: `${e.id}: ${what} değeri sıfırdan büyük olmalı.`, compIds: [e.id] });
+      } else if (v < 1e-15 || v > 1e12) {
+        issues.push({
+          level: 'warning',
+          message: `${e.id}: ${what} değeri (${v.toExponential(2)}) çok ${v < 1e-15 ? 'küçük' : 'büyük'}; sonuçlar sayısal olarak hatalı olabilir.`,
+          compIds: [e.id],
+        });
+      }
     }
     if ((e.type === 'V' || e.type === 'I') && e.params.mode === 'AC' && !(Number(e.params.freq) > 0)) {
       issues.push({ level: 'error', message: `${e.id}: AC frekansı sıfırdan büyük olmalı.`, compIds: [e.id] });

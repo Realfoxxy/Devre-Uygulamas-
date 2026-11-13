@@ -1,10 +1,10 @@
 // AC (fazör) analiz: matris karmaşık sayılarla kurulur.
 // Y_C = jωC, Y_L = 1/(jωL), ω = 2πf. Fazör genliği tepe değerdir.
-import { Complex, ZERO, abs, conj, cx, div, fromPolar, mul } from '../core/complex';
+import { Complex, ZERO, abs, conj, cx, fromPolar, mul } from '../core/complex';
 import type { AnalysisSettings } from '../core/circuit';
 import type { Netlist, NetElement } from '../core/netlist';
 import type { ACComp, ACResult, ACSweep } from '../core/results';
-import { MNASystem } from './mna';
+import { impedanceOf, makeCtx, measureElement, newSystem, solutionFrom, stampAll } from './stamp';
 
 export function acPhasor(e: NetElement): Complex {
   if (e.params.mode !== 'AC') return ZERO;
@@ -24,46 +24,19 @@ export function resolveAcFrequency(nl: Netlist, s: AnalysisSettings): { freq?: n
   return { error: 'AC kaynakların frekansları farklı: analiz ayarlarından tek bir frekans girin.' };
 }
 
-function admittance(e: NetElement, w: number): Complex | null {
-  const v = Number(e.params.value);
-  if (e.type === 'R') return cx(1 / v);
-  if (e.type === 'C') return cx(0, w * v);
-  if (e.type === 'L') return cx(0, -1 / (w * v));
-  return null;
-}
-
 function solveAt(nl: Netlist, f: number, track: boolean) {
-  const w = 2 * Math.PI * f;
-  const branchIds = nl.elements.filter((e) => e.type === 'V' || e.type === 'AM').map((e) => e.id);
-  const sys = new MNASystem(nl.nodeCount, branchIds, track);
-  for (const e of nl.elements) {
-    const [a, b] = e.nodes;
-    const y = admittance(e, w);
-    if (y) sys.stampAdmittance(a, b, y, e.id);
-    else if (e.type === 'V') sys.stampVoltage(a, b, e.id, acPhasor(e), e.id);
-    else if (e.type === 'AM') sys.stampVoltage(a, b, e.id, ZERO, e.id);
-    else if (e.type === 'I') sys.stampCurrent(a, b, acPhasor(e), e.id);
-  }
+  const ctx = makeCtx('ac', nl, { w: 2 * Math.PI * f });
+  const sys = newSystem(nl, ctx, track);
+  stampAll(sys, nl, ctx);
   const x = sys.solveComplex();
+  const sol = solutionFrom(sys, x);
   const nodeV: Complex[] = [ZERO];
   for (let k = 1; k <= nl.nodeCount; k++) nodeV.push(cx(x.re[k - 1], x.im[k - 1]));
   const comps: Record<string, ACComp> = {};
   for (const e of nl.elements) {
-    const [a, b] = e.nodes;
-    let V = cx(nodeV[a].re - nodeV[b].re, nodeV[a].im - nodeV[b].im);
-    let I: Complex = ZERO;
-    let Z: Complex | undefined;
-    const y = admittance(e, w);
-    if (y) {
-      I = mul(V, y);
-      Z = div(cx(1), y);
-    } else if (e.type === 'V' || e.type === 'AM') {
-      const k = sys.branch(e.id);
-      I = cx(x.re[k], x.im[k]);
-      if (e.type === 'AM') V = ZERO;
-    } else if (e.type === 'I') I = acPhasor(e);
-    const P = mul(V, conj(I)).re / 2;
-    comps[e.id] = { V, I, Z, P };
+    const { V, I } = measureElement(e, ctx, sol);
+    const Z = impedanceOf(e, ctx.w);
+    comps[e.id] = { V, I, Z, P: mul(V, conj(I)).re / 2 };
   }
   return { sys, x, nodeV, comps };
 }

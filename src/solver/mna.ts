@@ -16,11 +16,14 @@ export class MNASystem {
   private owners: Record<string, { cells: Set<string>; rhs: Set<number> }> = {};
   private trackOwners: boolean;
 
-  constructor(nodeCount: number, branchIds: string[], track = true) {
+  /** true iken matris yazılmaz, yalnızca sağ taraf (geçici rejim adımları için) */
+  rhsOnly = false;
+
+  constructor(nodeCount: number, branchIds: string[], track = true, nodeLabels?: Record<number, string>) {
     this.n = nodeCount;
     this.N = nodeCount + branchIds.length;
     this.labels = [];
-    for (let i = 1; i <= nodeCount; i++) this.labels.push(`v${i}`);
+    for (let i = 1; i <= nodeCount; i++) this.labels.push(nodeLabels?.[i] ?? `v${i}`);
     branchIds.forEach((id, k) => {
       this.branchIdx.set(id, nodeCount + k);
       this.labels.push(`j_${id}`);
@@ -47,8 +50,17 @@ export class MNASystem {
     return (this.owners[owner] ??= { cells: new Set(), rhs: new Set() });
   }
 
+  hasBranch(id: string) {
+    return this.branchIdx.has(id);
+  }
+
+  clearRhs() {
+    this.bre.fill(0);
+    this.bim.fill(0);
+  }
+
   addA(r: number, c: number, re: number, im: number, owner?: string) {
-    if (r < 0 || c < 0) return;
+    if (r < 0 || c < 0 || this.rhsOnly) return;
     this.Are[r * this.N + c] += re;
     this.Aim[r * this.N + c] += im;
     this.own(owner)?.cells.add(`${r},${c}`);
@@ -86,6 +98,66 @@ export class MNASystem {
     this.addA(ib, k, -1, 0, owner);
     this.addA(k, ib, -1, 0, owner);
     this.addB(k, V.re, V.im, owner);
+  }
+
+  /**
+   * Gerilim kaynağı + seri empedans dalı: v_a − v_b − Z·j = V.
+   * Z = 0 ideal kaynak; gerçek ampermetre, akımı ölçülen L / C bu biçimde damgalanır.
+   */
+  stampBranch(a: number, b: number, id: string, V: Complex, Z: Complex, owner?: string) {
+    this.stampVoltage(a, b, id, V, owner);
+    if (Z.re !== 0 || Z.im !== 0) {
+      const k = this.branch(id);
+      this.addA(k, k, -Z.re, -Z.im, owner);
+    }
+  }
+
+  /** Değeri bilinen akım dalı: j = I (dal akımı başka bir eleman tarafından okunabilsin diye) */
+  stampCurrentBranch(a: number, b: number, id: string, I: Complex, owner?: string) {
+    const k = this.branch(id);
+    this.addA(this.node(a), k, 1, 0, owner);
+    this.addA(this.node(b), k, -1, 0, owner);
+    this.addA(k, k, 1, 0, owner);
+    this.addB(k, I.re, I.im, owner);
+  }
+
+  /** Gerilim kontrollü gerilim kaynağı (E): v_a − v_b = A·(v_c − v_d) */
+  stampVCVS(a: number, b: number, c: number, d: number, id: string, A: number, owner?: string) {
+    this.stampVoltage(a, b, id, { re: 0, im: 0 }, owner);
+    const k = this.branch(id);
+    this.addA(k, this.node(c), -A, 0, owner);
+    this.addA(k, this.node(d), A, 0, owner);
+  }
+
+  /** Gerilim kontrollü akım kaynağı (G): içinde a'dan b'ye G·(v_c − v_d) */
+  stampVCCS(a: number, b: number, c: number, d: number, G: number, owner?: string) {
+    const ia = this.node(a);
+    const ib = this.node(b);
+    this.addA(ia, this.node(c), G, 0, owner);
+    this.addA(ia, this.node(d), -G, 0, owner);
+    this.addA(ib, this.node(c), -G, 0, owner);
+    this.addA(ib, this.node(d), G, 0, owner);
+  }
+
+  /** Akım kontrollü akım kaynağı (F): içinde a'dan b'ye B·j_m */
+  stampCCCS(a: number, b: number, ctrlBranch: string, B: number, owner?: string) {
+    const m = this.branch(ctrlBranch);
+    this.addA(this.node(a), m, B, 0, owner);
+    this.addA(this.node(b), m, -B, 0, owner);
+  }
+
+  /** Akım kontrollü gerilim kaynağı (H): v_a − v_b = R_m·j_m */
+  stampCCVS(a: number, b: number, id: string, ctrlBranch: string, Rm: number, owner?: string) {
+    this.stampVoltage(a, b, id, { re: 0, im: 0 }, owner);
+    this.addA(this.branch(id), this.branch(ctrlBranch), -Rm, 0, owner);
+  }
+
+  /** İdeal op-amp: çıkış dalı akımı k; v_+ = v_− kısıtı */
+  stampIdealOpAmp(o: number, p: number, n: number, id: string, owner?: string) {
+    const k = this.branch(id);
+    this.addA(this.node(o), k, 1, 0, owner);
+    this.addA(k, this.node(p), 1, 0, owner);
+    this.addA(k, this.node(n), -1, 0, owner);
   }
 
   realMatrix() {

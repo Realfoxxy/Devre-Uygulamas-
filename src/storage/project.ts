@@ -1,5 +1,5 @@
 // .devre proje dosyası (JSON) indirme / açma ve tarayıcıda otomatik taslak.
-import { CircuitDoc, DEFAULT_ANALYSIS, PARTS } from '../core/circuit';
+import { CircuitDoc, Component, CompType, DEFAULT_ANALYSIS, PARTS, Params, Wire } from '../core/circuit';
 
 const DRAFT_KEY = 'devre-lab:taslak';
 const REPORT_KEY = 'devre-lab:rapor-basligi';
@@ -10,40 +10,123 @@ export function serialize(doc: CircuitDoc): string {
 
 /** Dokümandaki biçim (t_stop) ile uygulamanın biçimini (tStop) birlikte kabul eder. */
 function normalizeAnalysis(a: Record<string, unknown> | undefined) {
-  const out = { ...DEFAULT_ANALYSIS, ...(a ?? {}) } as typeof DEFAULT_ANALYSIS & Record<string, unknown>;
-  if (a && a.t_stop !== undefined && a.tStop === undefined) out.tStop = (a.t_stop as number) ?? null;
-  delete out.t_stop;
-  if (!['dc', 'ac', 'transient'].includes(out.type)) out.type = 'dc';
-  return out as typeof DEFAULT_ANALYSIS;
+  const out = { ...DEFAULT_ANALYSIS };
+  if (!a || typeof a !== 'object') return out;
+  if (a.type === 'dc' || a.type === 'ac' || a.type === 'transient') out.type = a.type;
+  const num = (v: unknown) => (typeof v === 'number' && Number.isFinite(v) && v > 0 ? v : null);
+  out.freq = num(a.freq);
+  out.tStop = num(a.tStop ?? a.t_stop);
+  out.h = num(a.h);
+  if (typeof a.sweep === 'boolean') out.sweep = a.sweep;
+  out.fStart = num(a.fStart) ?? out.fStart;
+  out.fStop = num(a.fStop) ?? out.fStop;
+  const ppd = num(a.pointsPerDecade);
+  if (ppd) out.pointsPerDecade = Math.min(200, Math.round(ppd));
+  if (a.method === 'be' || a.method === 'trap') out.method = a.method;
+  if (a.acMeasure === 'rms' || a.acMeasure === 'peak') out.acMeasure = a.acMeasure;
+  return out;
 }
 
+/** Uygulamanın yazdığı dosya sürümü. Eski sürümler `migrate` ile yükseltilir. */
+export const FILE_VERSION = 1;
+export const MAX_COMPONENTS = 500;
+export const MAX_WIRES = 3000;
+const ID_RE = /^[A-Za-z0-9]{1,16}$/;
+
+/** Bileşen parametrelerinde kabul edilen alanlar (bilinmeyenler atılır). */
+const NUMERIC_PARAMS = ['value', 'amp', 'freq', 'phase', 'v0', 'i0', 'gain'] as const;
+const MODE_VALUES = ['DC', 'AC'];
+
+class FileError extends Error {}
+
+const finite = (v: unknown): v is number => typeof v === 'number' && Number.isFinite(v);
+const coord = (v: unknown, what: string) => {
+  const n = Number(v);
+  if (!Number.isFinite(n) || Math.abs(n) > 1e5) throw new FileError(`Dosyada geçersiz koordinat (${what}).`);
+  return Math.round(n);
+};
+
+function cleanParams(type: CompType, raw: unknown): Params {
+  const out: Params = { ...PARTS[type].defaultParams };
+  if (!raw || typeof raw !== 'object') return out;
+  const r = raw as Record<string, unknown>;
+  for (const k of NUMERIC_PARAMS) if (finite(r[k])) (out as Record<string, unknown>)[k] = r[k];
+  if (typeof r.mode === 'string' && MODE_VALUES.includes(r.mode)) out.mode = r.mode as Params['mode'];
+  const c = r.ctrl as Record<string, unknown> | undefined;
+  if (c && typeof c === 'object' && typeof c.ref === 'string' && ID_RE.test(c.ref) && (c.kind === 'V' || c.kind === 'I'))
+    out.ctrl = { ref: c.ref, kind: c.kind };
+  return out;
+}
+
+/** Eski dosya sürümlerini güncel biçime çevirir. */
+function migrate(raw: Record<string, unknown>): Record<string, unknown> {
+  return raw;
+}
+
+/**
+ * .devre dosyasını okur ve doğrular. Bozuk ya da kötü niyetli dosya uygulamayı çökertmez:
+ * Türkçe açıklamalı bir hata fırlatır; bilinmeyen alanlar atılır.
+ */
 export function deserialize(text: string): CircuitDoc {
-  const raw = JSON.parse(text);
-  if (!raw || typeof raw !== 'object' || !Array.isArray(raw.components)) throw new Error('Geçersiz .devre dosyası');
-  if (raw.version !== 1) throw new Error(`Desteklenmeyen dosya sürümü: ${raw.version}`);
-  const components = raw.components
-    .filter((c: { type: string }) => c && c.type in PARTS)
-    .map((c: { id: string; type: keyof typeof PARTS; x: number; y: number; rot?: number; params?: object }) => ({
-      id: String(c.id),
-      type: c.type,
-      x: Math.round(Number(c.x) || 0),
-      y: Math.round(Number(c.y) || 0),
-      rot: Number(c.rot) || 0,
-      params: { ...PARTS[c.type].defaultParams, ...(c.params ?? {}) },
-    }));
-  const wires = (raw.wires ?? []).map((w: { id?: string; from: [number, number]; to: [number, number] }, i: number) => ({
-    id: w.id ?? `w${i + 1}`,
-    from: [Math.round(w.from[0]), Math.round(w.from[1])],
-    to: [Math.round(w.to[0]), Math.round(w.to[1])],
-  }));
-  return {
-    version: 1,
-    meta: raw.meta ?? {},
-    components,
-    wires,
-    analysis: normalizeAnalysis(raw.analysis),
-    measured: raw.measured ?? {},
-  };
+  let raw: Record<string, unknown>;
+  try {
+    raw = JSON.parse(text);
+  } catch {
+    throw new FileError('Dosya okunamadı: geçerli bir .devre (JSON) dosyası değil.');
+  }
+  if (!raw || typeof raw !== 'object' || !Array.isArray(raw.components))
+    throw new FileError('Geçersiz .devre dosyası: bileşen listesi bulunamadı.');
+  const version = Number(raw.version);
+  if (!Number.isInteger(version) || version < 1 || version > FILE_VERSION)
+    throw new FileError(`Bu dosya sürümü (${String(raw.version)}) desteklenmiyor. Uygulamayı yenileyip tekrar deneyin.`);
+  raw = migrate(raw);
+  const rawComps = raw.components as unknown[];
+  if (rawComps.length > MAX_COMPONENTS) throw new FileError(`Dosyada çok fazla bileşen var (en fazla ${MAX_COMPONENTS}).`);
+  const rawWires = Array.isArray(raw.wires) ? (raw.wires as unknown[]) : [];
+  if (rawWires.length > MAX_WIRES) throw new FileError(`Dosyada çok fazla kablo var (en fazla ${MAX_WIRES}).`);
+
+  const ids = new Set<string>();
+  const components: Component[] = [];
+  for (const item of rawComps) {
+    const c = item as Record<string, unknown>;
+    if (!c || typeof c !== 'object' || typeof c.type !== 'string' || !(c.type in PARTS)) continue;
+    const id = String(c.id ?? '');
+    if (!ID_RE.test(id)) throw new FileError(`Geçersiz bileşen adı “${id.slice(0, 20)}”: en fazla 16 harf/rakam olmalı.`);
+    if (ids.has(id)) throw new FileError(`Aynı isimde iki bileşen var: ${id}.`);
+    ids.add(id);
+    const type = c.type as CompType;
+    const rot = ((Math.round(Number(c.rot) / 90) * 90) % 360 + 360) % 360;
+    components.push({ id, type, x: coord(c.x, id), y: coord(c.y, id), rot: Number.isFinite(rot) ? rot : 0, params: cleanParams(type, c.params) });
+  }
+  const wires: Wire[] = [];
+  const wireIds = new Set<string>();
+  rawWires.forEach((item, i) => {
+    const w = item as Record<string, unknown>;
+    if (!w || !Array.isArray(w.from) || !Array.isArray(w.to)) return;
+    let id = typeof w.id === 'string' && ID_RE.test(w.id) ? w.id : `w${i + 1}`;
+    while (wireIds.has(id)) id = `${id}x`.slice(-16);
+    wireIds.add(id);
+    wires.push({ id, from: [coord(w.from[0], 'kablo'), coord(w.from[1], 'kablo')], to: [coord(w.to[0], 'kablo'), coord(w.to[1], 'kablo')] });
+  });
+
+  const meta: CircuitDoc['meta'] = {};
+  const m = raw.meta as Record<string, unknown> | undefined;
+  if (m && typeof m === 'object') {
+    if (typeof m.deney === 'string') meta.deney = m.deney.slice(0, 200);
+    if (typeof m.tarih === 'string') meta.tarih = m.tarih.slice(0, 20);
+  }
+  const measured: CircuitDoc['measured'] = {};
+  const ms = raw.measured as Record<string, unknown> | undefined;
+  if (ms && typeof ms === 'object')
+    for (const [k, v] of Object.entries(ms)) {
+      if (!ids.has(k) || !v || typeof v !== 'object') continue;
+      const vv = v as Record<string, unknown>;
+      const entry: { V?: number; I?: number } = {};
+      if (finite(vv.V)) entry.V = vv.V;
+      if (finite(vv.I)) entry.I = vv.I;
+      if (entry.V !== undefined || entry.I !== undefined) measured[k] = entry;
+    }
+  return { version: 1, meta, components, wires, analysis: normalizeAnalysis(raw.analysis as Record<string, unknown>), measured };
 }
 
 export function downloadBlob(blob: Blob, filename: string) {
