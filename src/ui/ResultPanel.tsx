@@ -7,6 +7,7 @@ import type { AnalysisResult } from '../core/results';
 import { formatEng, percentError } from '../core/units';
 import { isStale, useStore } from '../state/store';
 import { SolutionView } from './SolutionView';
+import { DependentFields } from './DependentFields';
 import { ValueInput } from './ValueInput';
 import { compDisplay, nodeText } from './values';
 
@@ -139,7 +140,10 @@ function ParamEditor({ comp }: { comp: Component }) {
       </div>
       {nameErr && <div className="field-err">{nameErr}</div>}
       <p className="muted small">{def.help}</p>
-      <div className="fields">{rows}</div>
+      <div className="fields">
+        {rows}
+        <DependentFields comp={comp} />
+      </div>
       {(comp.type === 'V' || comp.type === 'I') && p.mode === 'AC' && (
         <p className="muted small">
           {comp.type === 'V' ? 'v' : 'i'}(t) = {formatEng(p.amp ?? 0, def.unit)} · sin(2π·{formatEng(p.freq ?? 0, 'Hz')}·t

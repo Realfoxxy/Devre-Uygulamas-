@@ -37,6 +37,8 @@ export interface AppState {
   group: Group;
   tool: 'select' | 'wire';
   placing: { type: CompType; rot: number } | null;
+  /** "Devreden seç": bu bağımlı kaynağın kontrol bileşeni bekleniyor */
+  pickCtrlFor: string | null;
   /** Devre her değiştiğinde artar; sonuçların güncel olup olmadığını belirler */
   version: number;
   results: AnalysisResult | null;
@@ -56,6 +58,7 @@ export interface AppState {
   // eylemler
   setTool: (t: AppState['tool']) => void;
   setPlacing: (p: AppState['placing']) => void;
+  setPickCtrl: (id: string | null) => void;
   select: (s: Selection) => void;
   /** Çoklu seçimi ayarlar; tek bileşen kalırsa normal seçime döner */
   setGroup: (g: Group) => void;
@@ -88,7 +91,7 @@ export interface AppState {
 }
 
 const emptyDoc = (): CircuitDoc => ({
-  version: 1,
+  version: 2,
   meta: { tarih: new Date().toISOString().slice(0, 10) },
   components: [],
   wires: [],
@@ -129,6 +132,7 @@ export const useStore = create<AppState>((set, get) => {
     group: null,
     tool: 'select',
     placing: null,
+    pickCtrlFor: null,
     version: 1,
     results: null,
     resultsVersion: 0,
@@ -143,7 +147,8 @@ export const useStore = create<AppState>((set, get) => {
     toast: null,
 
     setTool: (tool) => set({ tool, placing: null }),
-    setPlacing: (placing) => set({ placing, tool: 'select' }),
+    setPlacing: (placing) => set({ placing, tool: 'select', pickCtrlFor: null }),
+    setPickCtrl: (pickCtrlFor) => set({ pickCtrlFor, placing: null, tool: 'select' }),
     select: (selection) => set({ selection, group: null }),
     setGroup: (g) => {
       if (!g || (g.comps.length === 0 && g.wires.length === 0)) return set({ group: null, selection: null });
@@ -242,7 +247,12 @@ export const useStore = create<AppState>((set, get) => {
           measured[newId] = measured[id];
           delete measured[id];
         }
-        return { components: d.components.map((c) => (c.id === id ? { ...c, id: newId } : c)), measured };
+        // bağımlı kaynakların kontrol referansları da yeni isme geçer
+        const components = d.components.map((c) => {
+          const nc = c.id === id ? { ...c, id: newId } : c;
+          return nc.params.ctrl?.ref === id ? { ...nc, params: { ...nc.params, ctrl: { ...nc.params.ctrl, ref: newId } } } : nc;
+        });
+        return { components, measured };
       });
       set({ selection: { kind: 'comp', id: newId } });
       return null;

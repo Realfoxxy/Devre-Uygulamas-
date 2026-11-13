@@ -1,6 +1,6 @@
 // SVG çizim alanı: yerleştirme, sürükleme, kablo çizme, seçim, kaydırma ve yakınlaştırma.
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Component, CompType, PARTS, Pt, onSegment, pinPositions, ptKey, samePt } from '../core/circuit';
+import { Component, CompType, PARTS, Pt, ctrlKindOf, onSegment, pinPositions, ptKey, samePt } from '../core/circuit';
 import { pathToSegments, routeWire } from '../core/route';
 import { isStale, useStore } from '../state/store';
 import { G, PartSymbol, Theme } from './parts/symbols';
@@ -227,6 +227,18 @@ export function Canvas() {
     const compEl = target.closest('[data-comp]');
     const wireEl = target.closest('[data-wire]');
     lastDownComp.current = compEl && !pinEl ? compEl.getAttribute('data-comp') : null;
+
+    // "Devreden seç": bağımlı kaynağın kontrol bileşenini seç
+    if (s.pickCtrlFor) {
+      const id = compEl?.getAttribute('data-comp');
+      const dep = components.find((c) => c.id === s.pickCtrlFor);
+      if (id && dep && id !== dep.id) {
+        s.updateParams(dep.id, { ctrl: { ref: id, kind: ctrlKindOf(dep.type) } });
+        s.select({ kind: 'comp', id: dep.id });
+        s.setPickCtrl(null);
+      } else if (!id) s.setPickCtrl(null);
+      return;
+    }
 
     if (s.placing) {
       s.addComponent(s.placing.type, p[0], p[1], s.placing.rot);
@@ -582,6 +594,12 @@ export function Canvas() {
         <button title="Uzaklaştır" onClick={() => zoomBy(1 / 1.2)}>−</button>
         <button title="Devreyi sığdır" onClick={fit}>⤢</button>
       </div>
+      {s.pickCtrlFor && (
+        <div className="pick-banner" role="status">
+          <span>{s.pickCtrlFor} için kontrol bileşenine dokunun</span>
+          <button className="btn" onClick={() => s.setPickCtrl(null)}>İptal</button>
+        </div>
+      )}
       {(s.placing || s.tool === 'wire' || wireStart) && (
         <div className="mode-hint">
           {s.placing

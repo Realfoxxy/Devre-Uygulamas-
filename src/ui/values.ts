@@ -1,6 +1,6 @@
 // Sonuç nesnesinden bileşen / düğüm değerlerinin gösterim metinleri.
 import { abs, argDeg, Complex } from '../core/complex';
-import type { CompType } from '../core/circuit';
+import { CompType, isSource } from '../core/circuit';
 import type { AnalysisResult } from '../core/results';
 import { formatEng } from '../core/units';
 
@@ -32,7 +32,7 @@ export function compDisplay(
   tIndex: number | null,
   acMeasure: 'rms' | 'peak',
 ): CompDisplay | null {
-  const isSrc = type === 'V' || type === 'I';
+  const isSrc = isSource(type);
   const powerHint = (P: number) => (isSrc && P < -1e-15 ? '(güç veriyor)' : undefined);
   if (res.kind === 'dc') {
     const c = res.comps[id];

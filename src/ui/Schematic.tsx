@@ -9,6 +9,7 @@ export const SEL_COLOR = '#2557d6';
 export const ERR_COLOR = '#d92d20';
 export const CURRENT_COLOR = '#c2410c';
 export const NODE_COLOR = '#0f766e';
+export const CTRL_COLOR = '#7c3aed';
 
 export interface SchematicProps {
   components: Component[];
@@ -152,6 +153,21 @@ export function Schematic(p: SchematicProps) {
           </g>
         );
       })}
+
+      {/* seçili bağımlı kaynak ile kontrol eden bileşen arasında kesikli çizgi */}
+      {p.selectedComp && (() => {
+        const dep = components.find((c) => c.id === p.selectedComp);
+        const ref = dep?.params.ctrl?.ref ? components.find((c) => c.id === dep.params.ctrl!.ref) : undefined;
+        if (!dep || !ref) return null;
+        return (
+          <g pointerEvents="none">
+            <line x1={dep.x * G} y1={dep.y * G} x2={ref.x * G} y2={ref.y * G} stroke={CTRL_COLOR} strokeWidth={1.4} strokeDasharray="5 4" />
+            <g transform={`translate(${ref.x * G} ${ref.y * G}) rotate(${ref.rot})`}>
+              <rect x={-34} y={-21} width={68} height={42} rx={6} fill="rgba(124,58,237,0.08)" stroke={CTRL_COLOR} strokeDasharray="4 3" />
+            </g>
+          </g>
+        );
+      })()}
 
       {/* seçili bileşenin akım yönü */}
       {results && p.arrowFor && !p.stale && (() => {

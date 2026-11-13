@@ -6,12 +6,15 @@ import { resolveAcFrequency, solveAC } from './ac';
 import { solveDC } from './dc';
 import { SingularMatrixError } from './lu';
 import { solveTransient } from './transient';
-import { validateTopology } from './validate';
+import { validateControls, validateTopology } from './validate';
+import { isDependent } from '../core/circuit';
 
 export function analyze(nl: Netlist, settings: AnalysisSettings): AnalyzeOutput {
   const issues: Issue[] = [...nl.issues];
   const info: string[] = [];
   const fail = (): AnalyzeOutput => ({ ok: false, issues, settings, info });
+  if (issues.some((i) => i.level === 'error')) return fail();
+  issues.push(...validateControls(nl));
   if (issues.some((i) => i.level === 'error')) return fail();
   issues.push(...validateTopology(nl, settings.type));
   if (issues.some((i) => i.level === 'error')) return fail();
@@ -38,6 +41,15 @@ export function analyze(nl: Netlist, settings: AnalysisSettings): AnalyzeOutput 
     return { ok: true, result, issues, settings, info };
   } catch (err) {
     if (err instanceof SingularMatrixError) {
+      const culprit = blameAlgebraicLoop(nl, settings);
+      if (culprit) {
+        issues.push({
+          level: 'error',
+          message: `${culprit}'in kazancı bu değerde devreyi çözümsüz yapıyor (cebirsel döngü): denklemler birbiriyle çelişiyor. ${culprit}'in kazancını değiştirin.`,
+          compIds: [culprit],
+        });
+        return fail();
+      }
       issues.push({
         level: 'error',
         message:
@@ -48,4 +60,26 @@ export function analyze(nl: Netlist, settings: AnalysisSettings): AnalyzeOutput 
     }
     throw err;
   }
+}
+
+/** Tekil matrisin sorumlusu olan bağımlı kaynağı bulur: kazancı biraz değişince devre çözülüyorsa odur. */
+function blameAlgebraicLoop(nl: Netlist, settings: AnalysisSettings): string | null {
+  for (const e of nl.elements) {
+    if (!isDependent(e.type)) continue;
+    const g = Number(e.params.gain ?? 0);
+    const tweaked: Netlist = {
+      ...nl,
+      elements: nl.elements.map((x) => (x.id === e.id ? { ...x, params: { ...x.params, gain: g === 0 ? 1e-3 : g * 1.1 } } : x)),
+    };
+    try {
+      if (settings.type === 'ac') {
+        const { freq } = resolveAcFrequency(tweaked, settings);
+        solveAC(tweaked, { ...settings, sweep: false }, freq ?? 1000);
+      } else solveDC(tweaked);
+      return e.id;
+    } catch {
+      /* hâlâ tekil */
+    }
+  }
+  return null;
 }

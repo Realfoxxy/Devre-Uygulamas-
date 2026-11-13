@@ -104,6 +104,28 @@ export const EXAMPLES: { name: string; doc: CircuitDoc }[] = [
     },
   },
   {
+    name: 'Bağımlı kaynaklı yükselteç (VCVS)',
+    doc: {
+      ...base('Gerilim Kontrollü Gerilim Kaynağı'),
+      components: [
+        { id: 'V1', type: 'V', x: 4, y: 8, rot: 90, params: { mode: 'DC', value: 2, amp: 5, freq: 1000, phase: 0 } },
+        { id: 'VM1', type: 'VM', x: 10, y: 8, rot: 90, params: {} },
+        { id: 'E1', type: 'E', x: 18, y: 8, rot: 90, params: { gain: 5, ctrl: { ref: 'VM1', kind: 'V' } } },
+        { id: 'R1', type: 'R', x: 25, y: 8, rot: 90, params: { value: 1000 } },
+        { id: 'GND1', type: 'GND', x: 4, y: 13, rot: 0, params: {} },
+      ],
+      wires: [
+        { id: 'w1', from: [4, 6], to: [10, 6] },
+        { id: 'w2', from: [18, 6], to: [25, 6] },
+        { id: 'w3', from: [4, 10], to: [10, 10] },
+        { id: 'w4', from: [10, 10], to: [18, 10] },
+        { id: 'w5', from: [18, 10], to: [25, 10] },
+        { id: 'w6', from: [4, 10], to: [4, 13] },
+      ],
+      analysis: { ...DEFAULT_ANALYSIS, type: 'dc' },
+    },
+  },
+  {
     name: 'Wheatstone köprüsü (DC)',
     doc: {
       ...base('Wheatstone Köprüsü'),

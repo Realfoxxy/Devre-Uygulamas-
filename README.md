@@ -9,7 +9,8 @@ Hiçbir veri sunucuya gitmez.
 ## Özellikler
 
 - **Bileşenler:** direnç (R), kapasitör (C), bobin (L), DC/AC gerilim kaynağı (V), DC/AC akım kaynağı (I),
-  toprak (GND), ideal **voltmetre** (VM) ve **ampermetre** (AM).
+  toprak (GND), ideal **voltmetre** (VM) ve **ampermetre** (AM);
+  bağımlı kaynaklar: GKGK/VCVS (E), AKGK/CCVS (H), GKAK/VCCS (G), AKAK/CCCS (F) — kontrol bileşeni listeden ya da çizimden seçilir.
 - **Analizler:** DC, AC fazör (tek frekans + isteğe bağlı Bode taraması), geçici rejim (geri Euler / trapez).
 - **Ölçüm:** bileşene tıklayınca gerilim, akım, güç (AC'de genlik ∠ faz, etkin değer, empedans; geçici rejimde
   seçilen andaki değer ve τ). Devre üzerinde düğüm gerilimi etiketleri ve seçili bileşenin akım yönü oku.
