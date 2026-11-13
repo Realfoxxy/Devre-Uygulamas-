@@ -98,6 +98,24 @@ function Body({ type, params, t }: { type: CompType; params: Params; t: Theme })
           <Lead from={15} to={40} stroke={s} />
         </g>
       );
+    case 'E':
+    case 'H':
+    case 'G':
+    case 'F':
+      // Kitaptaki gibi eşkenar dörtgen: gerilim çıkışlılarda + −, akım çıkışlılarda ok
+      return (
+        <g>
+          <Lead from={-40} to={-17} stroke={s} />
+          <polygon points="-17,0 0,-17 17,0 0,17" fill={t.fill} stroke={s} strokeWidth={sw} strokeLinejoin="round" />
+          {(type === 'G' || type === 'F') && (
+            <>
+              <line x1={-9} y1={0} x2={5} y2={0} stroke={s} strokeWidth={2} />
+              <polygon points="10,0 3,-5 3,5" fill={s} />
+            </>
+          )}
+          <Lead from={17} to={40} stroke={s} />
+        </g>
+      );
     case 'GND':
       return (
         <g>
@@ -120,6 +138,12 @@ function uprightMarks(type: CompType, params: Params): { at: Pt; text: string; s
             { at: [-8, 0], text: '+', size: 14, bold: true },
             { at: [8, 0], text: '−', size: 14, bold: true },
           ];
+    case 'E':
+    case 'H':
+      return [
+        { at: [-7, 0], text: '+', size: 13, bold: true },
+        { at: [7, 0], text: '−', size: 13, bold: true },
+      ];
     case 'VM':
       return [
         { at: [0, 0], text: 'V', size: 15, bold: true },

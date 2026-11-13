@@ -1,6 +1,12 @@
 // Bileşen ve kablo veri modeli. Koordinatlar ızgara birimindedir.
 
-export type CompType = 'R' | 'C' | 'L' | 'V' | 'I' | 'GND' | 'VM' | 'AM';
+export type CompType = 'R' | 'C' | 'L' | 'V' | 'I' | 'GND' | 'VM' | 'AM' | 'E' | 'F' | 'G' | 'H';
+
+/** Bağımlı kaynaklar: E (VCVS), H (CCVS), G (VCCS), F (CCCS) */
+export const DEPENDENT: CompType[] = ['E', 'F', 'G', 'H'];
+export const isDependent = (t: CompType) => t === 'E' || t === 'F' || t === 'G' || t === 'H';
+/** Bağımlı kaynağın kontrol türü: gerilim (E, G) ya da akım (F, H) */
+export const ctrlKindOf = (t: CompType): 'V' | 'I' => (t === 'E' || t === 'G' ? 'V' : 'I');
 export type Pt = [number, number];
 
 export interface Params {
@@ -70,7 +76,7 @@ export interface Meta {
 }
 
 export interface CircuitDoc {
-  version: 1;
+  version: number;
   meta: Meta;
   components: Component[];
   wires: Wire[];
@@ -94,6 +100,10 @@ export const DEFAULT_ANALYSIS: AnalysisSettings = {
 export interface PartDef {
   type: CompType;
   name: string;
+  /** Paletteki kısa ad */
+  short?: string;
+  /** Palet grubu */
+  group: 'Pasif' | 'Kaynaklar' | 'Bağımlı kaynaklar' | 'Ölçü aletleri';
   prefix: string;
   pins: Pt[];
   defaultRot: number;
@@ -111,6 +121,7 @@ const TWO_PIN: Pt[] = [
 export const PARTS: Record<CompType, PartDef> = {
   R: {
     type: 'R',
+    group: 'Pasif',
     name: 'Direnç',
     prefix: 'R',
     pins: TWO_PIN,
@@ -121,6 +132,7 @@ export const PARTS: Record<CompType, PartDef> = {
   },
   C: {
     type: 'C',
+    group: 'Pasif',
     name: 'Kapasitör',
     prefix: 'C',
     pins: TWO_PIN,
@@ -131,6 +143,7 @@ export const PARTS: Record<CompType, PartDef> = {
   },
   L: {
     type: 'L',
+    group: 'Pasif',
     name: 'Bobin',
     prefix: 'L',
     pins: TWO_PIN,
@@ -141,6 +154,7 @@ export const PARTS: Record<CompType, PartDef> = {
   },
   V: {
     type: 'V',
+    group: 'Kaynaklar',
     name: 'Gerilim kaynağı',
     prefix: 'V',
     pins: TWO_PIN,
@@ -151,6 +165,7 @@ export const PARTS: Record<CompType, PartDef> = {
   },
   I: {
     type: 'I',
+    group: 'Kaynaklar',
     name: 'Akım kaynağı',
     prefix: 'I',
     pins: TWO_PIN,
@@ -161,6 +176,7 @@ export const PARTS: Record<CompType, PartDef> = {
   },
   GND: {
     type: 'GND',
+    group: 'Kaynaklar',
     name: 'Toprak',
     prefix: 'GND',
     pins: [[0, 0]],
@@ -171,6 +187,7 @@ export const PARTS: Record<CompType, PartDef> = {
   },
   VM: {
     type: 'VM',
+    group: 'Ölçü aletleri',
     name: 'Voltmetre',
     prefix: 'VM',
     pins: TWO_PIN,
@@ -181,6 +198,7 @@ export const PARTS: Record<CompType, PartDef> = {
   },
   AM: {
     type: 'AM',
+    group: 'Ölçü aletleri',
     name: 'Ampermetre',
     prefix: 'AM',
     pins: TWO_PIN,
@@ -189,9 +207,62 @@ export const PARTS: Record<CompType, PartDef> = {
     unit: 'A',
     help: 'İdeal ampermetre: içinden geçen akımı ölçer (kısa devre); seri bağlanır',
   },
+  E: {
+    type: 'E',
+    group: 'Bağımlı kaynaklar',
+    name: 'Gerilim kontrollü gerilim kaynağı',
+    short: 'GKGK (E)',
+    prefix: 'E',
+    pins: TWO_PIN,
+    defaultRot: 90,
+    defaultParams: { gain: 2 },
+    unit: 'V/V',
+    help: 'VCVS: çıkış gerilimi = A · (seçilen bileşenin gerilimi)',
+  },
+  H: {
+    type: 'H',
+    group: 'Bağımlı kaynaklar',
+    name: 'Akım kontrollü gerilim kaynağı',
+    short: 'AKGK (H)',
+    prefix: 'H',
+    pins: TWO_PIN,
+    defaultRot: 90,
+    defaultParams: { gain: 100 },
+    unit: 'Ω',
+    help: 'CCVS: çıkış gerilimi = R_m · (seçilen bileşenin akımı)',
+  },
+  G: {
+    type: 'G',
+    group: 'Bağımlı kaynaklar',
+    name: 'Gerilim kontrollü akım kaynağı',
+    short: 'GKAK (G)',
+    prefix: 'G',
+    pins: TWO_PIN,
+    defaultRot: 270,
+    defaultParams: { gain: 0.01 },
+    unit: 'S',
+    help: 'VCCS: çıkış akımı = G · (seçilen bileşenin gerilimi); ok yönünde akar',
+  },
+  F: {
+    type: 'F',
+    group: 'Bağımlı kaynaklar',
+    name: 'Akım kontrollü akım kaynağı',
+    short: 'AKAK (F)',
+    prefix: 'F',
+    pins: TWO_PIN,
+    defaultRot: 270,
+    defaultParams: { gain: 2 },
+    unit: 'A/A',
+    help: 'CCCS: çıkış akımı = B · (seçilen bileşenin akımı); ok yönünde akar',
+  },
 };
 
-export const PALETTE_ORDER: CompType[] = ['R', 'C', 'L', 'V', 'I', 'GND', 'VM', 'AM'];
+export const PALETTE_ORDER: CompType[] = ['R', 'C', 'L', 'V', 'I', 'GND', 'E', 'H', 'G', 'F', 'VM', 'AM'];
+
+/** Akım kontrolü için seçilebilen bileşenler */
+export const CURRENT_CTRL_TYPES: CompType[] = ['V', 'AM', 'R', 'L', 'C', 'I', 'E', 'H'];
+/** Gerilim kontrolü için seçilebilen bileşenler */
+export const VOLTAGE_CTRL_TYPES: CompType[] = ['R', 'C', 'L', 'V', 'I', 'VM', 'AM', 'E', 'F', 'G', 'H'];
 
 export function rotatePt([x, y]: Pt, rot: number): Pt {
   switch (((rot % 360) + 360) % 360) {
@@ -243,5 +314,5 @@ export function nextId(type: CompType, existing: { id: string }[]): string {
 
 /** Kaynak ve pasif bileşenlerin kısa değer yazımı (etiket ve tablolar için). */
 export function isSource(type: CompType) {
-  return type === 'V' || type === 'I';
+  return type === 'V' || type === 'I' || isDependent(type);
 }

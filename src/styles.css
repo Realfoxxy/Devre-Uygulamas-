@@ -131,6 +131,16 @@ kbd {
 .pi-abbr { position: absolute; top: 3px; right: 6px; font-size: 10px; color: var(--muted); font-weight: 600; }
 .palette-item.wide .pi-abbr { position: static; }
 .palette-help { margin-top: 16px; }
+.palette-group + .palette-group { margin-top: 10px; }
+.palette-group-title { font-size: 11px; color: var(--muted); margin: 0 0 5px 2px; }
+.ctrl-pick { display: flex; gap: 6px; min-width: 0; }
+.ctrl-pick select { flex: 1; min-width: 0; border: 1px solid var(--line); border-radius: 6px; padding: 6px; background: #fff; font: inherit; }
+.mb-dep label { display: grid; grid-template-columns: 90px 1fr; align-items: center; gap: 8px; font-size: 13px; }
+.pick-banner {
+  position: absolute; top: 10px; left: 50%; transform: translateX(-50%); z-index: 6;
+  display: flex; gap: 10px; align-items: center; background: #f3edff; border: 1px solid #c9b6f5; color: #4c1d95;
+  padding: 6px 8px 6px 14px; border-radius: 999px; font-size: 13px; box-shadow: 0 2px 10px rgba(0,0,0,0.08); max-width: calc(100% - 20px);
+}
 .palette-help ul { list-style: none; padding: 0; margin: 0 0 10px; font-size: 12px; display: grid; gap: 5px; color: #374151; }
 
 /* Çizim alanı */
@@ -291,7 +301,7 @@ kbd {
   .only-mobile { display: inline-flex; align-items: center; justify-content: center; }
   .only-mobile-block { display: block; }
   /* telefonda giriş kutuları 16px: iOS odaklanınca sayfayı yakınlaştırmasın */
-  .value-input input, .name-input, .form input { font-size: 16px; }
+  .value-input input, .name-input, .form input, .ctrl-pick select { font-size: 16px; }
   .main { grid-template-columns: minmax(0, 1fr); }
   .splitter { display: none; }
   .drawer { position: fixed; top: 0; bottom: 0; z-index: 60; width: min(340px, 88vw); transition: transform 0.2s ease; box-shadow: 0 0 40px rgba(0,0,0,0.18); }

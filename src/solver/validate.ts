@@ -1,11 +1,11 @@
 // Çözümden önce topolojik kontroller: gerilim kaynağı döngüleri ve
 // gerilimi belirlenemeyen (yalnızca akım kaynağı / kapasitör üzerinden bağlı) düğümler.
-import type { AnalysisType } from '../core/circuit';
+import { AnalysisType, CURRENT_CTRL_TYPES, PARTS, VOLTAGE_CTRL_TYPES, ctrlKindOf, isDependent } from '../core/circuit';
 import type { Issue, Netlist, NetElement } from '../core/netlist';
 
 /** Bu analizde dal akımı bilinmeyeni olan (gerilim tipi) elemanlar */
 export function isVoltageType(e: NetElement, mode: AnalysisType | 'tau'): boolean {
-  if (e.type === 'V' || e.type === 'AM') return true;
+  if (e.type === 'V' || e.type === 'AM' || e.type === 'E' || e.type === 'H') return true;
   if (e.type === 'L' && (mode === 'dc' || mode === 'tau')) return true;
   return false;
 }
@@ -46,7 +46,7 @@ export function validateTopology(nl: Netlist, mode: AnalysisType): Issue[] {
   // Toprağa "gerilim belirleyen" bir yol olmayan düğümler
   const adj: number[][] = Array.from({ length: nl.nodeCount + 1 }, () => []);
   for (const e of nl.elements) {
-    if (e.type === 'I' || e.type === 'VM') continue;
+    if (e.type === 'I' || e.type === 'VM' || e.type === 'G' || e.type === 'F') continue;
     if (e.type === 'C' && mode === 'dc') continue;
     const [a, b] = e.nodes;
     adj[a].push(b);
@@ -79,6 +79,48 @@ export function validateTopology(nl: Netlist, mode: AnalysisType): Issue[] {
         `gerilimi belirlenemiyor.`,
       compIds: comps,
     });
+  }
+  return issues;
+}
+
+/** Bağımlı kaynakların kontrol referanslarını denetler. */
+export function validateControls(nl: Netlist): Issue[] {
+  const issues: Issue[] = [];
+  const byId = new Map(nl.elements.map((e) => [e.id, e]));
+  for (const e of nl.elements) {
+    if (!isDependent(e.type)) continue;
+    const kind = ctrlKindOf(e.type);
+    const what = kind === 'V' ? 'gerilimine' : 'akımına';
+    const ref = e.params.ctrl?.ref;
+    if (!ref) {
+      issues.push({
+        level: 'error',
+        message: `${e.id} için kontrol bileşeni seçilmemiş. Sağ panelden hangi bileşenin ${what} bağlı olduğunu seçin.`,
+        compIds: [e.id],
+      });
+      continue;
+    }
+    if (ref === e.id) {
+      issues.push({ level: 'error', message: `${e.id} kendisini kontrol edemez. Başka bir bileşen seçin.`, compIds: [e.id] });
+      continue;
+    }
+    const c = byId.get(ref);
+    if (!c) {
+      issues.push({
+        level: 'error',
+        message: `${e.id}, ${ref} bileşeninin ${what} bağlı ama ${ref} devrede yok. ${e.id}'in kontrolünü yeniden seçin.`,
+        compIds: [e.id],
+      });
+      continue;
+    }
+    const allowed = kind === 'V' ? VOLTAGE_CTRL_TYPES : CURRENT_CTRL_TYPES;
+    if (!allowed.includes(c.type)) {
+      issues.push({
+        level: 'error',
+        message: `${PARTS[c.type].name} (${ref}) ${kind === 'V' ? 'gerilim' : 'akım'} kontrolü için seçilemez.`,
+        compIds: [e.id, ref],
+      });
+    }
   }
   return issues;
 }

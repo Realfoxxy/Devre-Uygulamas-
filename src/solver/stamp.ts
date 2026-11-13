@@ -24,9 +24,12 @@ export interface StampCtx {
   keep?: string;
   /** Devreden çıkarılan elemanlar (Thevenin yükü, τ hesabı) */
   exclude?: Set<string>;
-  /** DC'de kapasitör kısa devre sayılsın mı (yalnız iç hesaplar) */
   /** Akımı başka bir eleman tarafından okunan L / C elemanları */
   ctrlI: Set<string>;
+  /** İsimden elemana */
+  byId: Map<string, NetElement>;
+  /** Bağımlı kaynak kazançlarını değiştirmek için (cebirsel döngü teşhisi) */
+  gainScale?: Map<string, number>;
 }
 
 export function makeCtx(mode: StampMode, nl: Netlist, extra: Partial<StampCtx> = {}): StampCtx {
@@ -38,6 +41,7 @@ export function makeCtx(mode: StampMode, nl: Netlist, extra: Partial<StampCtx> =
     trap: false,
     state: new Map(),
     ctrlI: currentControlled(nl),
+    byId: new Map(nl.elements.map((e) => [e.id, e])),
     ...extra,
   };
 }
@@ -73,6 +77,8 @@ export function branchIds(nl: Netlist, ctx: StampCtx): string[] {
     switch (e.type) {
       case 'V':
       case 'AM':
+      case 'E':
+      case 'H':
         out.push(e.id);
         break;
       case 'L':
@@ -102,6 +108,35 @@ function companion(e: NetElement, ctx: StampCtx) {
 
 export function newSystem(nl: Netlist, ctx: StampCtx, track = true): MNASystem {
   return new MNASystem(nl.nodeCount, branchIds(nl, ctx), track);
+}
+
+const gainOf = (e: NetElement, ctx: StampCtx) => Number(e.params.gain ?? 0) * (ctx.gainScale?.get(e.id) ?? 1);
+
+/**
+ * Akım kontrolünün çözümdeki karşılığı:
+ * - dal akımı bilinmeyeni olan eleman (V, AM, E, H, DC'de L, akımı ölçülen L / C)
+ * - direnç: i = v / R (gerilim kontrolüne çevrilir)
+ * - akımı zaten bilinen eleman (I kaynağı, DC'de C = 0, voltmetre = 0)
+ */
+type CtrlCurrent =
+  | { kind: 'branch'; id: string }
+  | { kind: 'conductance'; c: number; d: number; g: number }
+  | { kind: 'const'; value: Complex };
+
+function ctrlCurrent(ref: NetElement, ctx: StampCtx, hasBranch: (id: string) => boolean): CtrlCurrent {
+  if (hasBranch(ref.id)) return { kind: 'branch', id: ref.id };
+  switch (ref.type) {
+    case 'R':
+      return { kind: 'conductance', c: ref.nodes[0], d: ref.nodes[1], g: 1 / Number(ref.params.value) };
+    case 'I':
+      return { kind: 'const', value: sourceValue(ref, ctx) };
+    case 'L':
+      if (ctx.mode === 'tran0') return { kind: 'const', value: cx(Number(ref.params.i0 ?? 0)) };
+      return { kind: 'const', value: ZERO };
+    default:
+      // DC'de kapasitör ve voltmetre akımı 0
+      return { kind: 'const', value: ZERO };
+  }
 }
 
 /** Tek bir elemanın damgası. */
@@ -170,6 +205,31 @@ export function stampElement(sys: MNASystem, e: NetElement, ctx: StampCtx) {
       return;
     case 'VM':
       return; // ideal voltmetre: açık devre
+    case 'E':
+    case 'G': {
+      const ref = ctx.byId.get(e.params.ctrl?.ref ?? '');
+      const [c, d] = ref ? ref.nodes : [0, 0];
+      const g = gainOf(e, ctx);
+      if (e.type === 'E') sys.stampVCVS(a, b, c, d, id, g, id);
+      else sys.stampVCCS(a, b, c, d, g, id);
+      return;
+    }
+    case 'F':
+    case 'H': {
+      const ref = ctx.byId.get(e.params.ctrl?.ref ?? '');
+      const g = gainOf(e, ctx);
+      const cc: CtrlCurrent = ref ? ctrlCurrent(ref, ctx, (x) => sys.hasBranch(x)) : { kind: 'const', value: ZERO };
+      if (e.type === 'F') {
+        if (cc.kind === 'branch') sys.stampCCCS(a, b, cc.id, g, id);
+        else if (cc.kind === 'conductance') sys.stampVCCS(a, b, cc.c, cc.d, g * cc.g, id);
+        else sys.stampCurrent(a, b, cx(cc.value.re * g, cc.value.im * g), id);
+      } else {
+        if (cc.kind === 'branch') sys.stampCCVS(a, b, id, cc.id, g, id);
+        else if (cc.kind === 'conductance') sys.stampVCVS(a, b, cc.c, cc.d, id, g * cc.g, id);
+        else sys.stampVoltage(a, b, id, cx(cc.value.re * g, cc.value.im * g), id);
+      }
+      return;
+    }
   }
 }
 
@@ -227,6 +287,31 @@ export function measureElement(e: NetElement, ctx: StampCtx, sol: Solution): { V
       return { V: ZERO, I: sol.j(e.id) };
     case 'VM':
       return { V, I: ZERO };
+    case 'E':
+    case 'H':
+      return { V, I: sol.j(e.id) };
+    case 'G': {
+      const ref = ctx.byId.get(e.params.ctrl?.ref ?? '');
+      if (!ref) return { V, I: ZERO };
+      const vc = sol.v(ref.nodes[0]);
+      const vd = sol.v(ref.nodes[1]);
+      const g = gainOf(e, ctx);
+      return { V, I: cx((vc.re - vd.re) * g, (vc.im - vd.im) * g) };
+    }
+    case 'F': {
+      const ref = ctx.byId.get(e.params.ctrl?.ref ?? '');
+      if (!ref) return { V, I: ZERO };
+      const g = gainOf(e, ctx);
+      const cc = ctrlCurrent(ref, ctx, sol.has);
+      let i: Complex;
+      if (cc.kind === 'branch') i = sol.j(cc.id);
+      else if (cc.kind === 'conductance') {
+        const vc = sol.v(cc.c);
+        const vd = sol.v(cc.d);
+        i = cx((vc.re - vd.re) * cc.g, (vc.im - vd.im) * cc.g);
+      } else i = cc.value;
+      return { V, I: cx(i.re * g, i.im * g) };
+    }
     default:
       return { V, I: ZERO };
   }

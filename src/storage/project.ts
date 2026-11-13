@@ -1,11 +1,11 @@
 // .devre proje dosyası (JSON) indirme / açma ve tarayıcıda otomatik taslak.
-import { CircuitDoc, Component, CompType, DEFAULT_ANALYSIS, PARTS, Params, Wire } from '../core/circuit';
+import { CircuitDoc, Component, CompType, DEFAULT_ANALYSIS, PARTS, Params, Wire, ctrlKindOf, isDependent } from '../core/circuit';
 
 const DRAFT_KEY = 'devre-lab:taslak';
 const REPORT_KEY = 'devre-lab:rapor-basligi';
 
 export function serialize(doc: CircuitDoc): string {
-  return JSON.stringify(doc, null, 2);
+  return JSON.stringify({ ...doc, version: FILE_VERSION }, null, 2);
 }
 
 /** Dokümandaki biçim (t_stop) ile uygulamanın biçimini (tStop) birlikte kabul eder. */
@@ -28,7 +28,7 @@ function normalizeAnalysis(a: Record<string, unknown> | undefined) {
 }
 
 /** Uygulamanın yazdığı dosya sürümü. Eski sürümler `migrate` ile yükseltilir. */
-export const FILE_VERSION = 1;
+export const FILE_VERSION = 2;
 export const MAX_COMPONENTS = 500;
 export const MAX_WIRES = 3000;
 const ID_RE = /^[A-Za-z0-9]{1,16}$/;
@@ -53,14 +53,17 @@ function cleanParams(type: CompType, raw: unknown): Params {
   for (const k of NUMERIC_PARAMS) if (finite(r[k])) (out as Record<string, unknown>)[k] = r[k];
   if (typeof r.mode === 'string' && MODE_VALUES.includes(r.mode)) out.mode = r.mode as Params['mode'];
   const c = r.ctrl as Record<string, unknown> | undefined;
-  if (c && typeof c === 'object' && typeof c.ref === 'string' && ID_RE.test(c.ref) && (c.kind === 'V' || c.kind === 'I'))
-    out.ctrl = { ref: c.ref, kind: c.kind };
+  if (isDependent(type) && c && typeof c === 'object' && typeof c.ref === 'string' && ID_RE.test(c.ref))
+    out.ctrl = { ref: c.ref, kind: ctrlKindOf(type) };
   return out;
 }
 
 /** Eski dosya sürümlerini güncel biçime çevirir. */
 function migrate(raw: Record<string, unknown>): Record<string, unknown> {
-  return raw;
+  let r = raw;
+  // v1 → v2: bağımlı kaynaklar (E, F, G, H) eklendi; mevcut alanlar değişmedi.
+  if (Number(r.version) === 1) r = { ...r, version: 2 };
+  return r;
 }
 
 /**
@@ -126,7 +129,7 @@ export function deserialize(text: string): CircuitDoc {
       if (finite(vv.I)) entry.I = vv.I;
       if (entry.V !== undefined || entry.I !== undefined) measured[k] = entry;
     }
-  return { version: 1, meta, components, wires, analysis: normalizeAnalysis(raw.analysis as Record<string, unknown>), measured };
+  return { version: FILE_VERSION, meta, components, wires, analysis: normalizeAnalysis(raw.analysis as Record<string, unknown>), measured };
 }
 
 export function downloadBlob(blob: Blob, filename: string) {

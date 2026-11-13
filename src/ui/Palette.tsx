@@ -4,6 +4,8 @@ import { useStore } from '../state/store';
 import { canvasApi } from './Canvas';
 import { PartIcon } from './parts/symbols';
 
+const GROUPS = ['Pasif', 'Kaynaklar', 'Bağımlı kaynaklar', 'Ölçü aletleri'] as const;
+
 export function Palette({ onPicked }: { onPicked?: () => void }) {
   const placing = useStore((s) => s.placing);
   const tool = useStore((s) => s.tool);
@@ -40,20 +42,25 @@ export function Palette({ onPicked }: { onPicked?: () => void }) {
   return (
     <div className="palette">
       <div className="panel-title">Bileşenler</div>
-      <div className="palette-grid">
-        {PALETTE_ORDER.map((t) => (
-          <button
-            key={t}
-            className={`palette-item ${placing?.type === t ? 'active' : ''}`}
-            onPointerDown={(e) => startDrag(t, e)}
-            title={PARTS[t].help}
-          >
-            <PartIcon type={t} />
-            <span className="pi-name">{PARTS[t].name}</span>
-            <span className="pi-abbr">{PARTS[t].prefix}</span>
-          </button>
-        ))}
-      </div>
+      {GROUPS.map((g) => (
+        <div key={g} className="palette-group">
+          <div className="palette-group-title">{g}</div>
+          <div className="palette-grid">
+            {PALETTE_ORDER.filter((t) => PARTS[t].group === g).map((t) => (
+              <button
+                key={t}
+                className={`palette-item ${placing?.type === t ? 'active' : ''}`}
+                onPointerDown={(e) => startDrag(t, e)}
+                title={`${PARTS[t].name}: ${PARTS[t].help}`}
+              >
+                <PartIcon type={t} />
+                <span className="pi-name">{PARTS[t].short ?? PARTS[t].name}</span>
+                <span className="pi-abbr">{PARTS[t].prefix}</span>
+              </button>
+            ))}
+          </div>
+        </div>
+      ))}
       <button className={`palette-item wide ${tool === 'wire' ? 'active' : ''}`} onClick={() => { setTool(tool === 'wire' ? 'select' : 'wire'); onPicked?.(); }}>
         <svg width="40" height="20" viewBox="0 0 40 20" aria-hidden>
           <polyline points="4,16 20,16 20,4 36,4" fill="none" stroke="currentColor" strokeWidth="2" />

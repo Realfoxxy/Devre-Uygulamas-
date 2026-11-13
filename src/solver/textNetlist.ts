@@ -28,6 +28,9 @@ export function parseNetlistText(text: string): Netlist {
         params.mode = 'DC';
         params.value = parseValue(rest[0]?.toUpperCase() === 'DC' ? rest[1] : rest[0]) ?? 0;
       }
+    } else if (type === 'E' || type === 'F' || type === 'G' || type === 'H') {
+      params.gain = parseValue(rest[0]) ?? 0;
+      if (rest[1]) params.ctrl = { ref: rest[1], kind: type === 'E' || type === 'G' ? 'V' : 'I' };
     } else if (type === 'R' || type === 'C' || type === 'L') {
       params.value = parseValue(rest[0]) ?? 0;
       const ic = rest.find((r) => /^IC=/i.test(r));

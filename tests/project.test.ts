@@ -57,7 +57,7 @@ describe('.devre proje dosyası', () => {
   });
 
   it('eski / bozuk dosyaları reddeder', () => {
-    expect(() => deserialize('{"version": 2, "components": []}')).toThrow();
+    expect(() => deserialize('{"version": 99, "components": []}')).toThrow();
     expect(() => deserialize('merhaba')).toThrow();
   });
 

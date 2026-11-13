@@ -3,6 +3,7 @@
 import {
   Component,
   CompType,
+  ctrlKindOf,
   Params,
   Pt,
   Wire,
@@ -214,6 +215,16 @@ export function describeValue(type: CompType, p: Params): string {
       }
       return `${formatEng(p.value ?? 0, u)} DC`;
     }
+    case 'E':
+    case 'F':
+    case 'G':
+    case 'H': {
+      const g = Number(p.gain ?? 0);
+      const k = ctrlKindOf(type);
+      const ref = p.ctrl?.ref ?? '?';
+      const gs = type === 'H' ? formatEng(g, 'Ω').replace(' ', '') : type === 'G' ? formatEng(g, 'S').replace(' ', '') : String(parseFloat(g.toPrecision(4)));
+      return `${gs}·${k === 'V' ? 'v' : 'i'}(${ref})`;
+    }
     case 'VM':
       return 'voltmetre';
     case 'AM':
@@ -240,6 +251,12 @@ export function netlistText(nl: Netlist): string {
         case 'V':
         case 'I':
           val = p.mode === 'AC' ? `AC ${p.amp} ${p.freq}Hz ${p.phase ?? 0}°` : `DC ${p.value}`;
+          break;
+        case 'E':
+        case 'F':
+        case 'G':
+        case 'H':
+          val = describeValue(e.type, p);
           break;
         case 'VM':
           val = '(voltmetre)';
