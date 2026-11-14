@@ -156,6 +156,34 @@ export const EXAMPLES: { name: string; doc: CircuitDoc }[] = [
     },
   },
   {
+    name: 'Bağımlı kaynaklı Thevenin',
+    doc: {
+      ...base('Bağımlı Kaynaklı Thevenin Eşdeğeri'),
+      components: [
+        { id: 'Vs', type: 'V', x: 4, y: 8, rot: 90, params: { mode: 'DC', value: 10, amp: 5, freq: 1000, phase: 0 } },
+        { id: 'R1', type: 'R', x: 9, y: 4, rot: 0, params: { value: 2 } },
+        { id: 'VM1', type: 'VM', x: 14, y: 8, rot: 90, params: {} },
+        { id: 'G1', type: 'G', x: 20, y: 8, rot: 90, params: { gain: 0.25, ctrl: { ref: 'VM1', kind: 'V' } } },
+        { id: 'GND1', type: 'GND', x: 4, y: 13, rot: 0, params: {} },
+      ],
+      wires: [
+        { id: 'w1', from: [4, 6], to: [4, 4] },
+        { id: 'w2', from: [4, 4], to: [7, 4] },
+        { id: 'w3', from: [11, 4], to: [14, 4] },
+        { id: 'w4', from: [14, 4], to: [14, 6] },
+        { id: 'w5', from: [14, 4], to: [20, 4] },
+        { id: 'w6', from: [20, 4], to: [20, 6] },
+        { id: 'w7', from: [4, 10], to: [4, 12] },
+        { id: 'w8', from: [4, 12], to: [14, 12] },
+        { id: 'w9', from: [14, 12], to: [20, 12] },
+        { id: 'w10', from: [14, 12], to: [14, 10] },
+        { id: 'w11', from: [20, 12], to: [20, 10] },
+        { id: 'w12', from: [4, 12], to: [4, 13] },
+      ],
+      analysis: { ...DEFAULT_ANALYSIS, type: 'dc' },
+    },
+  },
+  {
     name: 'Wheatstone köprüsü (DC)',
     doc: {
       ...base('Wheatstone Köprüsü'),

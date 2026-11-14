@@ -8,6 +8,7 @@ import { formatEng, percentError } from '../core/units';
 import { isStale, useStore } from '../state/store';
 import { SolutionView } from './SolutionView';
 import { DependentFields } from './DependentFields';
+import { TheoremPanel } from './TheoremCard';
 import { KclPanel, KvlPanel, SeriesParallelPanel } from './KirchhoffPanels';
 import { ValueInput } from './ValueInput';
 import { compDisplay, nodeText } from './values';
@@ -337,6 +338,7 @@ export function ResultPanel() {
         </div>
       )}
       <Issues />
+      <TheoremPanel />
       {tab === 'solution' && showSolution ? (
         <SolutionView />
       ) : group ? (

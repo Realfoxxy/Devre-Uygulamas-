@@ -25,6 +25,12 @@ interface Snapshot {
   wires: Wire[];
 }
 
+/** Açık teorem kartı (sonuçlar güncel çizimden canlı hesaplanır) */
+export type TheoremCard =
+  | { tool: 'transform'; source: string; resistor?: string }
+  | { tool: 'super'; target: string }
+  | { tool: 'thevenin' | 'req'; a: number; b: number; aPt: Pt; bPt: Pt; load: string | null };
+
 export type Selection = { kind: 'comp' | 'wire'; id: string } | null;
 /** Alan seçimi / Shift+tık ile oluşan çoklu seçim */
 export type Group = { comps: string[]; wires: string[] } | null;
@@ -55,6 +61,11 @@ export interface AppState {
   solutionOpen: boolean;
   /** Çizimde vurgulanan bileşenler (ör. KGY çevresi) */
   highlight: string[];
+  theorem: TheoremCard | null;
+  /** Thevenin / eşdeğer direnç için iki nokta seçimi */
+  pickNodes: { tool: 'thevenin' | 'req'; a: { node: number; pt: Pt } | null } | null;
+  /** Süperpozisyonda sıfırlanan kaynaklar (soluk çizilir) */
+  dimmed: string[];
   showNodeLabels: boolean;
   /** Grafikte gösterilen ek bileşenler */
   plotted: string[];
@@ -93,6 +104,11 @@ export interface AppState {
   setSolutionTab: (t: AppState['solutionTab']) => void;
   setSolutionOpen: (v: boolean) => void;
   setHighlight: (ids: string[]) => void;
+  setTheorem: (t: TheoremCard | null) => void;
+  setPickNodes: (p: AppState['pickNodes']) => void;
+  setDimmed: (ids: string[]) => void;
+  /** Çizimi topluca değiştirir (tek geri alma adımı) */
+  replaceCircuit: (components: Component[], wires: Wire[]) => void;
   setShowNodeLabels: (v: boolean) => void;
   togglePlotted: (id: string) => void;
   showToast: (msg: string) => void;
@@ -153,6 +169,9 @@ export const useStore = create<AppState>((set, get) => {
     solutionTab: 'mna',
     solutionOpen: false,
     highlight: [],
+    theorem: null,
+    pickNodes: null,
+    dimmed: [],
     showNodeLabels: true,
     plotted: [],
     toast: null,
@@ -405,6 +424,10 @@ export const useStore = create<AppState>((set, get) => {
     setSolutionTab: (solutionTab) => set({ solutionTab }),
     setSolutionOpen: (solutionOpen) => set({ solutionOpen }),
     setHighlight: (highlight) => set({ highlight }),
+    setTheorem: (theorem) => set({ theorem, dimmed: [], pickNodes: null }),
+    setPickNodes: (pickNodes) => set({ pickNodes, placing: null, pickCtrlFor: null, tool: 'select' }),
+    setDimmed: (dimmed) => set({ dimmed }),
+    replaceCircuit: (components, wires) => commit(() => ({ components, wires })),
     setShowNodeLabels: (showNodeLabels) => set({ showNodeLabels }),
     togglePlotted: (id) =>
       set((s) => ({ plotted: s.plotted.includes(id) ? s.plotted.filter((p) => p !== id) : [...s.plotted, id] })),

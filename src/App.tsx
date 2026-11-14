@@ -26,13 +26,17 @@ export default function App() {
     if (results && (results.kind === 'transient' || (results.kind === 'ac' && results.sweep))) setPlotsOpen(true);
   }, [results]);
 
-  // Telefonda çift dokunuşla bileşen düzenleme çekmecesini aç
+  // Telefonda çift dokunuşla bileşen düzenleme / teorem sonucu çekmecesini aç
   useEffect(() => {
     const h = () => {
       if (window.matchMedia('(max-width: 900px)').matches) setPanelOpen(true);
     };
     window.addEventListener('devre:edit-value', h);
-    return () => window.removeEventListener('devre:edit-value', h);
+    window.addEventListener('devre:open-panel', h);
+    return () => {
+      window.removeEventListener('devre:edit-value', h);
+      window.removeEventListener('devre:open-panel', h);
+    };
   }, []);
 
   // Klavye kısayolları

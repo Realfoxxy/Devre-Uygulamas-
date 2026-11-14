@@ -6,6 +6,7 @@ import { isStale, useStore } from '../state/store';
 import { G, PartSymbol, Theme } from './parts/symbols';
 import { Schematic, SEL_COLOR } from './Schematic';
 import { compDisplay } from './values';
+import { buildNetlist } from '../core/netlist';
 import { useMethods } from './useMethods';
 
 const SCREEN_THEME: Theme = {
@@ -229,6 +230,32 @@ export function Canvas() {
     const wireEl = target.closest('[data-wire]');
     lastDownComp.current = compEl && !pinEl ? compEl.getAttribute('data-comp') : null;
 
+    // Thevenin / eşdeğer direnç: iki düğüm seçimi
+    if (s.pickNodes) {
+      const nl = buildNetlist(components, wires);
+      let node: number | undefined;
+      let pt: Pt = p;
+      if (pinEl) {
+        const [cid, k] = pinEl.getAttribute('data-pin')!.split(':');
+        node = nl.pinNodes[cid]?.[Number(k)];
+        const c = components.find((cc) => cc.id === cid);
+        if (c) pt = pinPositions(c)[Number(k)];
+      } else if (wireEl) {
+        node = nl.wireNodes[wireEl.getAttribute('data-wire')!];
+        const w = wires.find((ww) => ww.id === wireEl.getAttribute('data-wire'));
+        if (w) pt = projectOnWire(p, w);
+      }
+      if (node === undefined || node < 0) return;
+      const pk = s.pickNodes;
+      if (!pk.a) s.setPickNodes({ ...pk, a: { node, pt } });
+      else if (node === pk.a.node) s.showToast('İkinci nokta farklı bir düğümde olmalı.');
+      else {
+        s.setTheorem({ tool: pk.tool, a: pk.a.node, b: node, aPt: pk.a.pt, bPt: pt, load: null });
+        window.dispatchEvent(new CustomEvent('devre:open-panel'));
+      }
+      return;
+    }
+
     // "Devreden seç": bağımlı kaynağın kontrol bileşenini seç
     if (s.pickCtrlFor) {
       const id = compEl?.getAttribute('data-comp');
@@ -442,6 +469,7 @@ export function Canvas() {
   const selectedComp = s.selection?.kind === 'comp' ? s.selection.id : null;
   const groupComps = useMemo(() => new Set(s.group?.comps ?? []), [s.group]);
   const highlightSet = useMemo(() => new Set(s.highlight), [s.highlight]);
+  const dimmedSet = useMemo(() => new Set(s.dimmed), [s.dimmed]);
   const methods = useMethods(s.solutionOpen && s.solutionTab !== 'mna');
   const groupWires = useMemo(() => new Set(s.group?.wires ?? []), [s.group]);
   const tipComp = tip ? components.find((c) => c.id === tip.id) : null;
@@ -512,6 +540,7 @@ export function Canvas() {
             selectedWire={s.selection?.kind === 'wire' ? s.selection.id : null}
             selectedComps={groupComps}
             highlightIds={highlightSet}
+            dimmedIds={dimmedSet}
             selectedWires={groupWires}
             arrowFor={selectedComp}
             acMeasure={s.doc.analysis.acMeasure}
@@ -580,6 +609,21 @@ export function Canvas() {
                 </g>
               );
             })}
+          {/* teorem için seçilen a / b noktaları */}
+          {(() => {
+            const marks: { pt: Pt; label: string }[] = [];
+            if (s.pickNodes?.a) marks.push({ pt: s.pickNodes.a.pt, label: 'a' });
+            if (s.theorem && (s.theorem.tool === 'thevenin' || s.theorem.tool === 'req'))
+              marks.push({ pt: s.theorem.aPt, label: 'a' }, { pt: s.theorem.bPt, label: 'b' });
+            return marks.map((mk, i) => (
+              <g key={i} pointerEvents="none" transform={`translate(${mk.pt[0] * G} ${mk.pt[1] * G})`}>
+                <circle r={10} fill="rgba(124,58,237,0.15)" stroke="#7c3aed" strokeWidth={2.5} />
+                <text x={13} y={-12} fontSize={14} fontWeight={700} fill="#7c3aed" fontFamily="DejaVuSans, sans-serif">
+                  {mk.label}
+                </text>
+              </g>
+            ));
+          })()}
           {box && (
             <rect
               x={Math.min(box.a[0], box.b[0]) * G}
@@ -629,6 +673,14 @@ export function Canvas() {
         <button title="Uzaklaştır" onClick={() => zoomBy(1 / 1.2)}>−</button>
         <button title="Devreyi sığdır" onClick={fit}>⤢</button>
       </div>
+      {s.pickNodes && (
+        <div className="pick-banner" role="status">
+          <span>
+            {s.pickNodes.a ? '2/2: b noktasına dokunun' : '1/2: a noktasına dokunun'} ({s.pickNodes.tool === 'thevenin' ? 'Thevenin / Norton' : 'eşdeğer direnç'})
+          </span>
+          <button className="btn" onClick={() => s.setPickNodes(null)}>İptal</button>
+        </div>
+      )}
       {s.pickCtrlFor && (
         <div className="pick-banner" role="status">
           <span>{s.pickCtrlFor} için kontrol bileşenine dokunun</span>

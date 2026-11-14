@@ -262,6 +262,18 @@ p.eq { margin: 0; white-space: normal; }
 .small-btn { font-size: 12px; padding: 4px 9px; }
 .kcl, .kvl, .sp { display: flex; flex-direction: column; gap: 6px; margin-top: 8px; }
 .kvl .btn { align-self: flex-start; }
+.theorem-card { border: 1px solid #d9ccf6; background: #fbf9ff; border-radius: 10px; padding: 10px 12px; display: flex; flex-direction: column; gap: 8px; }
+.theorem-head { display: flex; align-items: center; justify-content: space-between; }
+.theorem-head .badge { background: #efe7ff; color: #5b21b6; }
+.th-load { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; align-items: center; font-size: 13px; }
+.th-load select { border: 1px solid var(--line); border-radius: 6px; padding: 5px; background: #fff; font: inherit; }
+.mini-row { display: flex; gap: 8px; flex-wrap: wrap; }
+.mini-circuit { width: 48%; min-width: 150px; flex: 1; color: #1d2433; background: #fff; border: 1px solid var(--line); border-radius: 8px; }
+.mini-chart { position: relative; height: 170px; }
+.ok-text { color: var(--ok); }
+.bad-text { color: var(--danger); }
+.row-on td { background: #efe7ff; }
+.sum-row td { border-top: 2px solid var(--line); font-weight: 700; }
 .solution h4 { margin: 6px 0; font-size: 13px; }
 .netlist { background: #f7f8fb; border: 1px solid var(--line); border-radius: 6px; padding: 8px 10px; font-size: clamp(12px, 2.4cqi, 16px); margin: 0; overflow-x: auto; }
 .matrix-wrap { overflow-x: auto; border: 1px solid var(--line); border-radius: 6px; }
