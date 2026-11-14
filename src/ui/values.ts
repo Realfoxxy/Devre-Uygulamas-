@@ -55,8 +55,9 @@ export function compDisplay(
       { label: 'Çıkış gerilimi', value: vt(pv[2], 'V') },
       { label: 'Çıkış akımı', value: vt(vi.I, 'A'), hint: 'op-amp çıkışından devreye' },
     ];
-    if ((params?.model ?? 'ideal') !== 'finite')
-      d.rows.push({ label: 'İdeal op-amp', value: 'v₊ = v₋ (sanal kısa devre), i₊ = i₋ = 0' });
+    const model = params?.model ?? 'ideal';
+    if (model === 'ideal') d.rows.push({ label: 'İdeal op-amp', value: 'v₊ = v₋ (sanal kısa devre), i₊ = i₋ = 0' });
+    else if (model === 'offset') d.rows.push({ label: 'Ofsetli op-amp', value: 'v₊ − v₋ = −V_os, girişlerde I_b' });
   }
   // Bölüm 2.3: aktif / pasif ve pasif işaret kuralına göre güç
   if (type !== 'GND' && type !== 'VM' && type !== 'AM') {
@@ -76,7 +77,14 @@ export function compDisplay(
     d.rows.push({ label: 'Depolanan enerji', value: formatEng(w, 'J'), hint: type === 'C' ? '½Cv²' : '½Li²' });
   }
   if (type === 'POT' && pv) d.rows.push({ label: 'Orta uç gerilimi', value: vt(pv[2], 'V'), hint: 'toprağa göre' });
-  if (type === 'SW2' && params) d.rows.push({ label: 'Konum', value: `ortak uç → ${params.way ?? 'A'}` });
+  if (type === 'SW2' && params) {
+    const times = params.times ?? [];
+    const curT = res.kind === 'transient' ? res.t[stepIndex(res, tIndex)] : -1;
+    const toggles = res.kind === 'transient' ? times.filter((x) => x <= curT + 1e-15).length : times.filter((x) => x < 0).length;
+    const w0 = params.way ?? 'A';
+    const way = toggles % 2 === 0 ? w0 : w0 === 'A' ? 'B' : 'A';
+    d.rows.push({ label: 'Konum', value: `ortak uç → ${way}` });
+  }
   if ((type === 'VM' || type === 'AM') && res.kind === 'dc' && res.idealMeters?.[id] !== undefined) {
     const ideal = res.idealMeters[id];
     const real = type === 'VM' ? res.comps[id].V : res.comps[id].I;

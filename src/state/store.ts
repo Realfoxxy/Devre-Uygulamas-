@@ -137,6 +137,7 @@ const newWireId = (wires: Wire[]) => {
 
 const snap = (d: CircuitDoc): Snapshot => ({ components: d.components, wires: d.wires });
 let toastTimer: ReturnType<typeof setTimeout> | undefined;
+let runSeq = 0;
 
 export const useStore = create<AppState>((set, get) => {
   /** Devreyi değiştiren işlemler: geri alma adımı + sürüm artışı */
@@ -288,7 +289,25 @@ export const useStore = create<AppState>((set, get) => {
         });
         return { components, measured };
       });
-      set({ selection: { kind: 'comp', id: newId } });
+      set((s) => {
+        let theorem = s.theorem;
+        if (theorem?.tool === 'transform') {
+          theorem = {
+            ...theorem,
+            source: theorem.source === id ? newId : theorem.source,
+            resistor: theorem.resistor === id ? newId : theorem.resistor,
+          };
+        } else if (theorem?.tool === 'super' && theorem.target === id) {
+          theorem = { ...theorem, target: newId };
+        } else if ((theorem?.tool === 'thevenin' || theorem?.tool === 'req') && theorem.load === id) {
+          theorem = { ...theorem, load: newId };
+        }
+        return {
+          selection: { kind: 'comp', id: newId },
+          plotted: s.plotted.map((p) => (p === id ? newId : p)),
+          theorem,
+        };
+      });
       return null;
     },
 
@@ -308,20 +327,47 @@ export const useStore = create<AppState>((set, get) => {
 
     deleteSelection: () => {
       const { selection: sel, group } = get();
+      const pruneState = (delIds: Set<string>) =>
+        set((s) => {
+          let theorem = s.theorem;
+          if (theorem?.tool === 'transform' && (delIds.has(theorem.source) || (theorem.resistor && delIds.has(theorem.resistor)))) {
+            theorem = null;
+          } else if (theorem?.tool === 'super' && delIds.has(theorem.target)) {
+            theorem = null;
+          } else if ((theorem?.tool === 'thevenin' || theorem?.tool === 'req') && theorem.load && delIds.has(theorem.load)) {
+            theorem = { ...theorem, load: null };
+          }
+          return {
+            group: null,
+            selection: null,
+            plotted: s.plotted.filter((p) => !delIds.has(p)),
+            theorem,
+          };
+        });
       if (group) {
         const cs = new Set(group.comps);
         const ws = new Set(group.wires);
-        commit((d) => ({ components: d.components.filter((c) => !cs.has(c.id)), wires: d.wires.filter((w) => !ws.has(w.id)) }));
-        set({ group: null, selection: null });
+        commit((d) => {
+          const measured = { ...d.measured };
+          for (const id of cs) delete measured[id];
+          return { components: d.components.filter((c) => !cs.has(c.id)), wires: d.wires.filter((w) => !ws.has(w.id)), measured };
+        });
+        pruneState(cs);
         return;
       }
       if (!sel) return;
-      commit((d) =>
-        sel.kind === 'comp'
-          ? { components: d.components.filter((c) => c.id !== sel.id) }
-          : { wires: d.wires.filter((w) => w.id !== sel.id) },
-      );
-      set({ selection: null });
+      if (sel.kind === 'comp') {
+        const cs = new Set([sel.id]);
+        commit((d) => {
+          const measured = { ...d.measured };
+          delete measured[sel.id];
+          return { components: d.components.filter((c) => c.id !== sel.id), measured };
+        });
+        pruneState(cs);
+      } else {
+        commit((d) => ({ wires: d.wires.filter((w) => w.id !== sel.id) }));
+        set({ selection: null });
+      }
     },
 
     undo: () => {
@@ -400,10 +446,12 @@ export const useStore = create<AppState>((set, get) => {
     run: async () => {
       const s = get();
       const version = s.version;
+      const myRun = ++runSeq;
       const nl = buildNetlist(s.doc.components, s.doc.wires);
       set({ running: true });
       try {
         const out = await runAnalysis(nl, s.doc.analysis);
+        if (myRun !== runSeq) return;
         if (!out.ok) {
           set({ issues: out.issues, running: false, results: null, resultsInfo: out.info });
           return;
@@ -418,6 +466,7 @@ export const useStore = create<AppState>((set, get) => {
           tIndex: null,
         });
       } catch (e) {
+        if (myRun !== runSeq) return;
         set({
           running: false,
           issues: [{ level: 'error', message: `Analiz hatası: ${(e as Error).message}`, compIds: [] }],

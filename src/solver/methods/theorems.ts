@@ -5,10 +5,12 @@ import type { Netlist, NetElement } from '../../core/netlist';
 import { SingularMatrixError } from '../lu';
 import { MNASystem } from '../mna';
 import { StampCtx, makeCtx, measureElement, newSystem, solutionFrom, stampAll } from '../stamp';
+import { sourceBefore } from '../waveform';
 
 export type TheoremMode = { kind: 'dc' } | { kind: 'ac'; freq: number };
 
-const isIndependent = (e: NetElement) => e.type === 'V' || e.type === 'I';
+const isIndependent = (e: NetElement, mode?: TheoremMode) =>
+  e.type === 'V' || e.type === 'I' || (mode?.kind !== 'ac' && (e.type === 'TS' || (e.type === 'OA' && e.params.model === 'offset')));
 
 function ctxFor(nl: Netlist, mode: TheoremMode, extra: Partial<StampCtx> = {}) {
   return makeCtx(mode.kind === 'dc' ? 'dc' : 'ac', nl, { w: mode.kind === 'ac' ? 2 * Math.PI * mode.freq : 0, ...extra });
@@ -63,7 +65,7 @@ const power = (V: Complex, I: Complex, mode: TheoremMode) => (mode.kind === 'dc'
 export function superposition(nl: Netlist, target: string, mode: TheoremMode): SuperResult | { error: string } {
   const el = nl.elements.find((e) => e.id === target);
   if (!el) return { error: 'Bileşen bulunamadı.' };
-  const sources = nl.elements.filter(isIndependent);
+  const sources = nl.elements.filter((e) => isIndependent(e, mode));
   if (sources.length < 1) return { error: 'Devrede bağımsız kaynak yok.' };
   const measure = (ctx: StampCtx): { V: Complex; I: Complex } | null => {
     const s = solve(nl, ctx);
@@ -110,7 +112,7 @@ const BIG = 1e11;
 export function thevenin(nl: Netlist, a: number, b: number, mode: TheoremMode, load: string | null = null): TheveninResult {
   const exclude = new Set(load ? [load] : []);
   const notes: string[] = [];
-  const hasIndep = nl.elements.some((e) => isIndependent(e) && !exclude.has(e.id));
+  const hasIndep = nl.elements.some((e) => isIndependent(e, mode) && !exclude.has(e.id));
   const hasDep = nl.elements.some((e) => ['E', 'F', 'G', 'H'].includes(e.type) && !exclude.has(e.id));
   const vab = (s: Solved) => sub(s.v(a), s.v(b));
 
@@ -244,7 +246,7 @@ export function transformCandidates(nl: Netlist, id: string): string[] {
     return nl.elements.filter((e) => e.type === 'R' && [...e.nodes].sort().join() === [...src.nodes].sort().join()).map((e) => e.id);
   const out: string[] = [];
   for (const m of src.nodes) {
-    if (m === 0 || degree(nl, m) !== 2) continue;
+    if (degree(nl, m) !== 2) continue;
     const r = nl.elements.find((e) => e.type === 'R' && (e.nodes[0] === m || e.nodes[1] === m));
     if (r) out.push(r.id);
   }
@@ -255,29 +257,39 @@ export function sourceTransform(nl: Netlist, id: string, opt: SourceTransformOpt
   const src = nl.elements.find((e) => e.id === id);
   if (!src || (src.type !== 'V' && src.type !== 'I')) return { ok: false, message: 'Bir gerilim ya da akım kaynağı seçin.' };
   if (src.params.mode === 'AC') return { ok: false, message: 'Kaynak dönüşümü şimdilik DC kaynaklar için.' };
-  const val = Number(src.params.value ?? 0);
+  const isControlled = (eid: string) => nl.elements.some((e) => e.params.ctrl?.ref === eid);
+  if (isControlled(id)) return { ok: false, message: `${id} bir bağımlı kaynağın kontrol elemanı olduğu için dönüştürülemez.` };
+  const val = sourceBefore(src);
   if (src.type === 'V') {
     // + ya da − ucunda, yalnızca bu kaynağa ve bir dirence bağlı ara düğüm
     for (const pin of [0, 1] as const) {
       const m = src.nodes[pin];
-      if (m === 0 || degree(nl, m) !== 2) continue;
+      if (degree(nl, m) !== 2) continue;
       const r = nl.elements.find((e) => e.type === 'R' && e.id !== id && (e.nodes[0] === m || e.nodes[1] === m));
       if (!r || (opt.resistor && r.id !== opt.resistor)) continue;
+      if (isControlled(r.id)) return { ok: false, message: `${r.id} bir bağımlı kaynağın kontrol elemanı olduğu için dönüştürülemez.` };
       const R = Number(r.params.value);
       const outerV = src.nodes[1 - pin];
       const outerR = r.nodes[0] === m ? r.nodes[1] : r.nodes[0];
+      if (outerV === outerR) return { ok: false, message: 'Devrede başka dal yok; dönüşüm sonrası uçlar kısa devre olur.' };
       // V'nin + ucu dışarıdaysa (pin 1 ara düğümde) v_ab = +V, a = dış + taraf
       const plusOuter = pin === 1;
-      const a = plusOuter ? outerV : outerR;
-      const b = plusOuter ? outerR : outerV;
+      let a = plusOuter ? outerV : outerR;
+      let b = plusOuter ? outerR : outerV;
       const I = val / R;
       // akım kaynağı içinde b'den a'ya akar → eleman düğümleri [b, a]
-      const elements = nl.elements
+      let elements = nl.elements
         .filter((e) => e.id !== id && e.id !== r.id)
         .concat([
           { id: `${id}`, type: 'I', nodes: [b, a], params: { mode: 'DC', value: I } },
           { id: r.id, type: 'R', nodes: [a, b], params: { value: R } },
         ]);
+      if (m === 0) {
+        const newGnd = b;
+        elements = elements.map((e) => ({ ...e, nodes: e.nodes.map((n) => (n === newGnd ? 0 : n)) }));
+        if (a === newGnd) a = 0;
+        b = 0;
+      }
       return {
         ok: true,
         kind: 'VtoI',
@@ -299,6 +311,7 @@ export function sourceTransform(nl: Netlist, id: string, opt: SourceTransformOpt
   if (cands.length > 1 && !opt.resistor)
     return { ok: false, message: `${id} ile paralel birden fazla direnç var (${cands.join(', ')}); hangisinin dönüşüme gireceğini seçin.` };
   const r = nl.elements.find((e) => e.id === (opt.resistor ?? cands[0]))!;
+  if (isControlled(r.id)) return { ok: false, message: `${r.id} bir bağımlı kaynağın kontrol elemanı olduğu için dönüştürülemez.` };
   const R = Number(r.params.value);
   // akım içeride nodes[0] → nodes[1] akar, yani nodes[1] ucundan dışarı çıkar: o uç gerilim kaynağının + ucu
   const a = src.nodes[1];

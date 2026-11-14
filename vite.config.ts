@@ -34,5 +34,6 @@ export default defineConfig({
   base: './',
   plugins: [react(), csp()],
   worker: { format: 'es' },
+  build: { chunkSizeWarningLimit: 650 },
   test: { include: ['tests/**/*.test.ts'] },
 });

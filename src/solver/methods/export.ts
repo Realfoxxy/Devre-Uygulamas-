@@ -32,9 +32,8 @@ const tex = (s: string) =>
     .replace(/−/g, '-')
     .replace(/·/g, ' \\cdot ')
     .replace(/µ/g, '\\mu ')
-    .replace(/_([A-Za-z0-9]+)/g, '_{$1}')
-    .replace(/v(\d+)/g, 'v_{$1}')
-    .replace(/i(\d+)/g, 'i_{$1}');
+    .replace(/\b([vi])(\d+)\b/g, '$1_{$2}')
+    .replace(/_([A-Za-z0-9]+)/g, '_{$1}');
 
 export function toLatex(equations: EqLine[], A: number[][], b: number[], names: string[], Aname: string): string {
   const eqs = equations.map((e) => `  ${tex(e.text).replace('=', '&=')} \\\\`).join('\n');

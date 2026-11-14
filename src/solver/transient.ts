@@ -36,10 +36,11 @@ export function initialConditions(nl: Netlist, info: string[] = []) {
     try {
       x = sys.solveReal();
     } catch {
-      // t < 0'da boşta kalan düğümler: çok küçük iletkenlikle 0 V'a çekilir
+      // t < 0'da boşta kalan düğümler veya paralel bobinler: çok küçük iletkenlik / dirençle tekillik giderilir
       sys = newSystem(nl, ctx, false);
       for (let k = 1; k <= ctx.nodeTotal; k++) sys.stampAdmittance(k, 0, cx(1e-12));
       stampAll(sys, nl, ctx);
+      for (let r = ctx.nodeTotal; r < sys.N; r++) sys.addA(r, r, -1e-12, 0);
       try {
         x = sys.solveReal();
       } catch {
@@ -171,10 +172,15 @@ export function resolveTiming(nl: Netlist, s: AnalysisSettings, taus: Record<str
     if (!tStop) tStop = 10e-3;
     info.push(`Toplam süre otomatik: ${tStop.toPrecision(3)} s (${maxTau ? '5τ' : 'kaynak dalga biçimine göre'}).`);
   }
+  // τ'su tanımsız kalan C / L varsa (ör. seri iki kapasitör DC'de açık devre) LC rezonans ölçeği √(LC) de hesaba katılır
+  const Cv = nl.elements.filter((e) => e.type === 'C').map((e) => Number(e.params.value));
+  const Lv = nl.elements.filter((e) => e.type === 'L').map((e) => Number(e.params.value));
+  const untimed = nl.elements.some((e) => (e.type === 'C' || e.type === 'L') && !Object.keys(taus).some((k) => k === e.id || k.startsWith(`${e.id}@`)));
+  const lcScale = untimed && Cv.length && Lv.length ? Math.sqrt(Math.min(...Lv) * Math.min(...Cv)) : Infinity;
   let h = s.h && s.h > 0 ? s.h : 0;
   if (!h) {
-    h = Math.min(minTau / 50, minScale / 50, tStop / 200);
-    info.push(`Zaman adımı otomatik: h = ${h.toPrecision(3)} s (en küçük τ, darbe genişliği ya da periyodun 1/50'si).`);
+    h = Math.min(minTau / 50, minScale / 50, lcScale / 50, tStop / 200);
+    info.push(`Zaman adımı otomatik: h = ${h.toPrecision(3)} s (en küçük τ, √(LC), darbe genişliği ya da periyodun 1/50'si).`);
   }
   const swTimes = nl.elements.filter((e) => e.type === 'SW' || e.type === 'SW2').flatMap((e) => (e.params.times ?? []).filter((x) => x > 0 && x < tStop));
   const bps = [...new Set([...sources.flatMap((e) => breakpoints(e.params, tStop)), ...swTimes].map((t) => +t.toPrecision(12)))].sort((x, y) => x - y);
@@ -267,7 +273,7 @@ export function solveTransient(nl: Netlist, s: AnalysisSettings): { result: Tran
   let t0ok = false;
   {
     const ctx0 = makeCtx('tran0', nl0, { t: 0, h: t[1] - t[0], state });
-    const sys0 = newSystem(nl0, ctx0, false);
+    let sys0 = newSystem(nl0, ctx0, false);
     stampAll(sys0, nl0, ctx0);
     try {
       const x0 = sys0.solveReal();
@@ -277,6 +283,36 @@ export function solveTransient(nl: Netlist, s: AnalysisSettings): { result: Tran
       for (const e of els) after[e.id] = { V: cV[e.id][0], I: cI[e.id][0] };
     } catch (err) {
       if (!(err instanceof SingularMatrixError)) throw err;
+      // Paralel kapasitörler veya seri bobinler: sonsuz küçük companion düzenlileştirmesiyle 0⁺ çözümü
+      try {
+        const eps = Math.max(1e-15, 1e-9 * (t[1] - t[0]));
+        sys0 = newSystem(nl0, ctx0, false);
+        for (let k = 1; k <= ctx0.nodeTotal; k++) sys0.stampAdmittance(k, 0, cx(1e-12));
+        stampAll(sys0, nl0, ctx0);
+        for (const e of nl0.elements) {
+          if (e.type === 'C' && sys0.hasBranch(e.id)) {
+            const b = sys0.branch(e.id);
+            sys0.addA(b, b, -eps / Math.max(1e-15, Number(e.params.value)), 0);
+          } else if (e.type === 'L') {
+            sys0.stampAdmittance(e.nodes[0], e.nodes[1], cx(eps / Math.max(1e-15, Number(e.params.value))));
+          }
+        }
+        const x0 = sys0.solveReal();
+        const vAt = (node: number) => (node > 0 ? x0[node - 1] : 0);
+        const contOk = nl0.elements.every(
+          (e) =>
+            e.type !== 'C' ||
+            Math.abs(vAt(e.nodes[0]) - vAt(e.nodes[1]) - Number(e.params.v0 ?? 0)) <= 1e-4 * Math.max(1, Math.abs(Number(e.params.v0 ?? 0))),
+        );
+        if (contOk) {
+          record(0, sys0, x0, ctx0, nl0.elements);
+          t0ok = true;
+          after = {};
+          for (const e of els) after[e.id] = { V: cV[e.id][0], I: cI[e.id][0] };
+        }
+      } catch {
+        /* t0ok false kalır, ilk adım kullanılır */
+      }
     }
   }
 

@@ -155,7 +155,10 @@ function postChecks(nl: Netlist, res: AnalysisResult, issues: Issue[], info: str
         for (let k = 0; k < c.V.length; k++) {
           vmax = Math.max(vmax, Math.abs(c.V[k]));
           imax = Math.max(imax, Math.abs(c.I[k]));
-          if (k > 0) dv = Math.max(dv, Math.abs(c.V[k] - c.V[k - 1]) / res.h);
+          if (k > 0) {
+            const dt = res.t[k] - res.t[k - 1];
+            if (dt > 0) dv = Math.max(dv, Math.abs(c.V[k] - c.V[k - 1]) / dt);
+          }
         }
       }
       if (vmax > vsat) warn(`${e.id}: çıkış ${formatEng(vmax, 'V')}. Gerçek bir op-amp burada doyuma girerdi (±${formatEng(vsat, 'V')}).`, e.id);

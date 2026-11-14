@@ -1,6 +1,6 @@
 // SVG çizim alanı: yerleştirme, sürükleme, kablo çizme, seçim, kaydırma ve yakınlaştırma.
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Component, CompType, PARTS, Pt, ctrlKindOf, onSegment, pinPositions, ptKey, samePt } from '../core/circuit';
+import { Component, CompType, CURRENT_CTRL_TYPES, PARTS, Pt, VOLTAGE_CTRL_TYPES, ctrlKindOf, onSegment, pinPositions, ptKey, samePt } from '../core/circuit';
 import { pathToSegments, routeWire } from '../core/route';
 import { isStale, useStore } from '../state/store';
 import { G, PartSymbol, Theme } from './parts/symbols';
@@ -272,7 +272,18 @@ export function Canvas() {
       const id = compEl?.getAttribute('data-comp');
       const dep = components.find((c) => c.id === s.pickCtrlFor);
       if (id && dep && id !== dep.id) {
-        s.updateParams(dep.id, { ctrl: { ref: id, kind: ctrlKindOf(dep.type) } });
+        const targetComp = components.find((c) => c.id === id);
+        const kind = ctrlKindOf(dep.type);
+        const allowed = kind === 'V' ? VOLTAGE_CTRL_TYPES : CURRENT_CTRL_TYPES;
+        if (!targetComp || !allowed.includes(targetComp.type)) {
+          s.showToast(
+            kind === 'V'
+              ? 'Gerilim kontrolü için iki uçlu bir devre elemanı seçin.'
+              : 'Akım kontrolü için akımı tanımlı bir devre elemanı seçin (voltmetre vb. seçilemez).',
+          );
+          return;
+        }
+        s.updateParams(dep.id, { ctrl: { ref: id, kind } });
         s.select({ kind: 'comp', id: dep.id });
         s.setPickCtrl(null);
       } else if (!id) s.setPickCtrl(null);
@@ -491,14 +502,22 @@ export function Canvas() {
   const previewPath = wireStart && wireTarget && !samePt(wireStart, wireTarget) ? route(wireStart, wireTarget) : null;
   // Hiçbir şeye bağlı olmayan pinler (kullanıcıya görsel uyarı)
   const openPins = useMemo(() => {
-    const count = new Map<string, number>();
-    const bump = (p: Pt) => count.set(ptKey(p), (count.get(ptKey(p)) ?? 0) + 1);
-    components.forEach((c) => pinPositions(c).forEach(bump));
-    wires.forEach((w) => {
-      bump(w.from);
-      bump(w.to);
-    });
-    return new Set([...count].filter(([, n]) => n === 1).map(([k]) => k));
+    const nl = buildNetlist(components, wires);
+    const pinCount = new Map<number, number>();
+    for (const c of components) for (const n of nl.pinNodes[c.id] ?? []) pinCount.set(n, (pinCount.get(n) ?? 0) + 1);
+    const open = new Set<string>();
+    for (const c of components) {
+      const ns = nl.pinNodes[c.id] ?? [];
+      const selfShort = c.type !== 'SW2' && c.type !== 'POT' && ns.length === 2 && ns[0] === ns[1] && (pinCount.get(ns[0]) ?? 0) === 2;
+      const optionalThirdPin = (c.type === 'SW2' || c.type === 'POT') && ns.filter((n) => (pinCount.get(n) ?? 0) >= 2).length >= 2;
+      pinPositions(c).forEach((p, i) => {
+        const n = ns[i];
+        if (selfShort || (!optionalThirdPin && (n === undefined || (pinCount.get(n) ?? 0) <= 1))) {
+          open.add(ptKey(p));
+        }
+      });
+    }
+    return open;
   }, [components, wires]);
   const hoveringConn = (s.tool === 'wire' || wireStart) && hover && isConnection(hover);
   const gridSize = G * view.k;

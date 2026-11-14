@@ -122,7 +122,7 @@ function nearestIndex(t: ArrayLike<number>, x: number): number {
 export function Plots() {
   const s = useStore();
   const [energyOn, setEnergyOn] = useState(false);
-  const [e1, setE1] = useState(0);
+  const [e1Raw, setE1] = useState(0);
   const [e2Raw, setE2] = useState<number | null>(null);
   const res = s.results;
   const sel = s.selection?.kind === 'comp' ? s.selection.id : null;
@@ -139,7 +139,8 @@ export function Plots() {
       const resp = res.secondOrder?.response;
       const st = resp ? res.secondOrder!.analysis.states[resp.index] : undefined;
       const fo = res.firstOrder;
-      const formula = resp && st
+      // birleşik durum (ör. seri iki C'nin toplam gerilimi) tek bir elemanın grafiğine çizilmez
+      const formula = resp && st && !st.terms
         ? { id: st.id, kind: st.kind === 'C' ? ('V' as const) : ('I' as const), f: (t: number) => responseEval(resp, t) }
         : fo?.elem && fo.intervals.every((iv) => iv.model)
           ? { id: fo.elem, kind: fo.kind === 'C' ? ('V' as const) : ('I' as const), f: (t: number) => { const iv = fo.intervals.find((x) => t >= x.t0 - 1e-15 && t <= x.t1 + 1e-15) ?? fo.intervals[fo.intervals.length - 1]; return foEval(iv, t); } }
@@ -156,6 +157,7 @@ export function Plots() {
 
   const tr = res?.kind === 'transient' ? res : null;
   const energyId = tr ? (ids[0] ?? null) : null;
+  const e1 = tr ? Math.min(e1Raw, tr.t.length - 1) : 0;
   const e2 = tr ? Math.min(e2Raw ?? tr.t.length - 1, tr.t.length - 1) : 0;
   const iv0 = tr?.firstOrder?.intervals.find((iv) => iv.tau);
   const tauLines = iv0?.tau ? [1, 3, 5].map((k) => ({ x: iv0.t0 + k * iv0.tau!, label: `${k === 1 ? '' : k}τ` })) : undefined;
