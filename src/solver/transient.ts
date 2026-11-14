@@ -186,6 +186,9 @@ export function resolveTiming(nl: Netlist, s: AnalysisSettings, taus: Record<str
       if (next <= prev + 1e-15) continue;
       const n = Math.max(1, Math.ceil((next - prev) / hh - 1e-9));
       const dt = (next - prev) / n;
+      // Kenardan sonraki ilk adım geri Euler'dir (yerel hatası ~dt²): bu adım dt/16, dt/16, dt/8,
+      // dt/4, dt/2 alt adımlarına bölünür; yalnızca ilk alt adım geri Euler kalır, hata ~256 kat düşer.
+      if (n > 1) for (const f of [1 / 16, 1 / 8, 1 / 4, 1 / 2]) g.push(prev + f * dt);
       for (let i = 1; i <= n; i++) g.push(i === n ? next : prev + i * dt);
       if (next !== tStop) br.add(g.length - 1);
       prev = next;
@@ -316,6 +319,9 @@ export function solveTransient(nl: Netlist, s: AnalysisSettings): { result: Tran
     // ilk adımda ve her kırılma noktasından sonraki adımda geri Euler (trapez ani kenarlarda salınım yapar)
     const trap = useTrap && k > 1 && !breaks.has(k - 1);
     ctx.t = t[k];
+    // Kırılma noktasında BİTEN adım kaynağın kenardan önceki değerini kullanır; yoksa kenar
+    // bir adım erken uygulanmış olur (anahtarlar zaten t⁻ durumuyla damgalanıyor).
+    ctx.tSrc = breaks.has(k) || k === steps ? t[k] - dt * 1e-6 : undefined;
     const { sys, lu } = systemFor(dt, trap, k === 1);
     ctx.h = dt;
     ctx.trap = trap;

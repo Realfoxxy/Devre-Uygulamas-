@@ -15,7 +15,9 @@ export function solveDC(nl: Netlist, extra: Partial<StampCtx> = {}): DCResult {
   for (const e of nl.elements) {
     if (ctx.exclude?.has(e.id)) continue;
     const m = measureElement(e, ctx, sol);
-    comps[e.id] = { V: m.V.re, I: m.I.re, P: e.type === 'OA' ? -m.V.re * m.I.re : m.V.re * m.I.re };
+    // çok uçlu elemanlarda soğurulan güç Σ v_k·i_k (i_k: pinden giren akım)
+    const P = m.pinV && m.pinI ? m.pinV.reduce((s, v, k) => s + v.re * m.pinI![k].re, 0) : m.V.re * m.I.re;
+    comps[e.id] = { V: m.V.re, I: m.I.re, P };
     if (m.pinV) comps[e.id].pinV = m.pinV.map((z) => z.re);
     if (m.pinI) comps[e.id].pinI = m.pinI.map((z) => z.re);
   }

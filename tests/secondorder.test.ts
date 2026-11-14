@@ -69,7 +69,8 @@ describe('İkinci derece devreler', () => {
     expect(m.exps[0].X).toBeCloseTo(-12, 6);
     expect(m.exps[0].s).toBeCloseTo(-2, 9);
     expect(m.deviation!).toBeLessThan(0.5);
-    expect(responseEval(m, 1)).toBeCloseTo(r.comps.L1.I[1000], 3);
+    const k1 = r.t.findIndex((x) => Math.abs(x - 1) < 1e-9);
+    expect(responseEval(m, 1)).toBeCloseTo(r.comps.L1.I[k1], 3);
   });
 
   it('5. Çakışan giriş: aynı devre, i_s = 3e^(−6t) A → i_f = −3.6·t·e^(−6t) A', async () => {

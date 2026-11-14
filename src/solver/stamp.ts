@@ -14,6 +14,8 @@ export interface StampCtx {
   w: number;
   /** Geçici rejim: zaman, adım, trapez mi */
   t: number;
+  /** Bağımsız kaynakların okunduğu an (kırılma noktasında biten adımda kenarın SOL limiti); yoksa t */
+  tSrc?: number;
   h: number;
   trap: boolean;
   /** Geçici rejim: kapasitör / bobinlerin bir önceki adım değerleri */
@@ -130,7 +132,7 @@ export function sourceValue(e: NetElement, ctx: StampCtx): Complex {
     case 'ac':
       return p.mode === 'AC' ? fromPolar(Number(p.amp ?? 0), Number(p.phase ?? 0)) : ZERO;
     default:
-      return cx(sourceAt(e, ctx.t));
+      return cx(sourceAt(e, ctx.tSrc ?? ctx.t));
   }
 }
 
@@ -420,8 +422,11 @@ export function measureElement(e: NetElement, ctx: StampCtx, sol: Solution): Mea
     }
     case 'POT': {
       const vw = sol.v(e.nodes[2]);
-      const { top } = potParts(e);
-      return { V, I: cx((va.re - vw.re) / top, (va.im - vw.im) / top), pinV: [va, vb, vw] };
+      const { top, bottom } = potParts(e);
+      const iTop = cx((va.re - vw.re) / top, (va.im - vw.im) / top);
+      const iBot = cx((vw.re - vb.re) / bottom, (vw.im - vb.im) / bottom);
+      // her pinden giren akım: a ucu, b ucu, orta uç (orta uçtan akım çekilince iTop ≠ iBot)
+      return { V, I: iTop, pinV: [va, vb, vw], pinI: [iTop, cx(-iBot.re, -iBot.im), cx(iBot.re - iTop.re, iBot.im - iTop.im)] };
     }
     case 'SW2': {
       const [c, pa, pb] = e.nodes.map((k) => sol.v(k));
