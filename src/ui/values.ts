@@ -106,3 +106,24 @@ export function nodeText(res: AnalysisResult, node: number, tIndex: number | nul
   if (res.kind === 'ac') return phasorText(res.nodeV[node], 'V');
   return formatEng(res.nodeV[node]?.[stepIndex(res, tIndex)] ?? 0, 'V');
 }
+
+/** Bileşenin (seçili andaki) gerilim ve akımı karmaşık sayı olarak (DC / geçici: sanal kısım 0). */
+export function compVI(res: AnalysisResult, id: string, tIndex: number | null): { V: Complex; I: Complex } | null {
+  if (res.kind === 'dc') {
+    const c = res.comps[id];
+    return c ? { V: { re: c.V, im: 0 }, I: { re: c.I, im: 0 } } : null;
+  }
+  if (res.kind === 'ac') {
+    const c = res.comps[id];
+    return c ? { V: c.V, I: c.I } : null;
+  }
+  const c = res.comps[id];
+  if (!c) return null;
+  const k = stepIndex(res, tIndex);
+  return { V: { re: c.V[k], im: 0 }, I: { re: c.I[k], im: 0 } };
+}
+
+/** Gerilim ya da akım değeri: AC'de fazör, diğerlerinde sayı */
+export function valueText(res: AnalysisResult, z: Complex, unit: string): string {
+  return res.kind === 'ac' ? phasorText(z, unit) : formatEng(z.re, unit);
+}

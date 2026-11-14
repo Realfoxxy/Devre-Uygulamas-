@@ -50,6 +50,11 @@ export interface AppState {
   /** Geçici analizde gösterilen zaman adımı (null → son adım) */
   tIndex: number | null;
   showSolution: boolean;
+  /** "Çözümü göster" panelinde hangi sekme açık; panel görünür mü */
+  solutionTab: 'mna' | 'node' | 'mesh';
+  solutionOpen: boolean;
+  /** Çizimde vurgulanan bileşenler (ör. KGY çevresi) */
+  highlight: string[];
   showNodeLabels: boolean;
   /** Grafikte gösterilen ek bileşenler */
   plotted: string[];
@@ -85,6 +90,9 @@ export interface AppState {
   run: () => Promise<void>;
   setTIndex: (k: number | null) => void;
   setShowSolution: (v: boolean) => void;
+  setSolutionTab: (t: AppState['solutionTab']) => void;
+  setSolutionOpen: (v: boolean) => void;
+  setHighlight: (ids: string[]) => void;
   setShowNodeLabels: (v: boolean) => void;
   togglePlotted: (id: string) => void;
   showToast: (msg: string) => void;
@@ -142,6 +150,9 @@ export const useStore = create<AppState>((set, get) => {
     running: false,
     tIndex: null,
     showSolution: false,
+    solutionTab: 'mna',
+    solutionOpen: false,
+    highlight: [],
     showNodeLabels: true,
     plotted: [],
     toast: null,
@@ -149,7 +160,7 @@ export const useStore = create<AppState>((set, get) => {
     setTool: (tool) => set({ tool, placing: null }),
     setPlacing: (placing) => set({ placing, tool: 'select', pickCtrlFor: null }),
     setPickCtrl: (pickCtrlFor) => set({ pickCtrlFor, placing: null, tool: 'select' }),
-    select: (selection) => set({ selection, group: null }),
+    select: (selection) => set({ selection, group: null, highlight: [] }),
     setGroup: (g) => {
       if (!g || (g.comps.length === 0 && g.wires.length === 0)) return set({ group: null, selection: null });
       if (g.comps.length === 1 && g.wires.length === 0) return set({ group: null, selection: { kind: 'comp', id: g.comps[0] } });
@@ -391,6 +402,9 @@ export const useStore = create<AppState>((set, get) => {
 
     setTIndex: (tIndex) => set({ tIndex }),
     setShowSolution: (showSolution) => set({ showSolution }),
+    setSolutionTab: (solutionTab) => set({ solutionTab }),
+    setSolutionOpen: (solutionOpen) => set({ solutionOpen }),
+    setHighlight: (highlight) => set({ highlight }),
     setShowNodeLabels: (showNodeLabels) => set({ showNodeLabels }),
     togglePlotted: (id) =>
       set((s) => ({ plotted: s.plotted.includes(id) ? s.plotted.filter((p) => p !== id) : [...s.plotted, id] })),

@@ -3,6 +3,7 @@ import { Fragment } from 'react';
 import { netlistText } from '../core/netlist';
 import type { SystemDump } from '../core/results';
 import { useStore } from '../state/store';
+import { MethodsView } from './MethodsView';
 
 export function fmtCell(v: number | [number, number]): string {
   const f = (x: number) => {
@@ -20,7 +21,23 @@ export function fmtCell(v: number | [number, number]): string {
   return f(v);
 }
 
+/** Çözüm sekmeleri: MNA (çözücünün kurduğu sistem), düğüm ve çevre denklemleri */
 export function SolutionView() {
+  const tab = useStore((s) => s.solutionTab);
+  const setTab = useStore((s) => s.setSolutionTab);
+  return (
+    <div className="solution-tabs">
+      <div className="seg sub-tabs" role="tablist">
+        <button className={tab === 'node' ? 'on' : ''} onClick={() => setTab('node')}>Düğüm denklemleri</button>
+        <button className={tab === 'mesh' ? 'on' : ''} onClick={() => setTab('mesh')}>Çevre denklemleri</button>
+        <button className={tab === 'mna' ? 'on' : ''} onClick={() => setTab('mna')}>MNA</button>
+      </div>
+      {tab === 'mna' ? <MnaView /> : <MethodsView tab={tab} />}
+    </div>
+  );
+}
+
+function MnaView() {
   const results = useStore((s) => s.results);
   const nl = useStore((s) => s.resultsNetlist);
   const sel = useStore((s) => (s.selection?.kind === 'comp' ? s.selection.id : null));
@@ -34,7 +51,7 @@ export function SolutionView() {
       <h4>Netlist</h4>
       <pre className="netlist">{netlistText(nl) || '—'}</pre>
       <p className="muted small">Sütunlar: eleman, düğüm+, düğüm−, değer. 0 = toprak.</p>
-      <h4>MNA denklemi  A · x = b</h4>
+      <h4>MNA (Değiştirilmiş Düğüm Analizi) denklemi  A · x = b</h4>
       <p className="muted small">{sys.note}</p>
       {sel && owned && (
         <p className="small">
