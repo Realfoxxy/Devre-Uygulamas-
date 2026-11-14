@@ -214,7 +214,7 @@ export interface SourceTransform {
   text?: string;
 }
 
-const degree = (nl: Netlist, n: number) => nl.elements.filter((e) => e.nodes[0] === n || e.nodes[1] === n).length;
+const degree = (nl: Netlist, n: number) => nl.elements.filter((e) => e.nodes.includes(n)).length;
 
 /** Kullanılmayan düğümleri atıp yeniden numaralar. */
 function compact(nl: Netlist, elements: NetElement[]): Netlist {
@@ -225,7 +225,7 @@ function compact(nl: Netlist, elements: NetElement[]): Netlist {
   for (let i = 1; i <= nl.nodeCount; i++) if (used.has(i)) map.set(i, k++);
   return {
     ...nl,
-    elements: elements.map((e) => ({ ...e, nodes: [map.get(e.nodes[0])!, map.get(e.nodes[1])!] as [number, number] })),
+    elements: elements.map((e) => ({ ...e, nodes: e.nodes.map((n) => map.get(n)!) })),
     nodeCount: k - 1,
     issues: [],
   };
