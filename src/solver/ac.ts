@@ -36,7 +36,8 @@ function solveAt(nl: Netlist, f: number, track: boolean) {
   for (const e of nl.elements) {
     const m = measureElement(e, ctx, sol);
     const Z = impedanceOf(e, ctx.w);
-    comps[e.id] = { V: m.V, I: m.I, Z, P: mul(m.V, conj(m.I)).re / 2, pinV: m.pinV, pinI: m.pinI };
+    const P = m.pinV && m.pinI ? m.pinV.reduce((s, v, k) => s + mul(v, conj(m.pinI![k])).re / 2, 0) : mul(m.V, conj(m.I)).re / 2;
+    comps[e.id] = { V: m.V, I: m.I, Z, P, pinV: m.pinV, pinI: m.pinI };
   }
   return { sys, x, nodeV, comps };
 }

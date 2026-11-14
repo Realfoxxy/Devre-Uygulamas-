@@ -1,7 +1,7 @@
 // Alt grafik paneli: geçici rejimde v(t) ve i(t), AC taramada Bode grafikleri.
 import { Chart, ChartConfiguration } from 'chart.js';
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { energyBetween } from '../core/energy';
+import { compEnergy } from '../core/energy';
 import { foEval } from '../solver/methods/firstOrder';
 import { responseEval } from '../solver/methods/secondOrder';
 import { formatEng } from '../core/units';
@@ -227,7 +227,7 @@ export function Plots() {
               <b>
                 {(() => {
                   const c = tr.comps[energyId];
-                  const w = energyBetween(tr.t, c.V, c.I, tr.t[e1], tr.t[e2]);
+                  const w = compEnergy(tr.t, c, tr.t[e1], tr.t[e2]);
                   return `bu aralıkta ${formatEng(Math.abs(w), 'J')} ${Math.abs(w) < 1e-15 ? '' : w > 0 ? 'soğurdu' : 'verdi'}`;
                 })()}
               </b>

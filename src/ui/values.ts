@@ -3,6 +3,7 @@ import { abs, argDeg, Complex } from '../core/complex';
 import { CompType, Params, isSource } from '../core/circuit';
 import type { AnalysisResult } from '../core/results';
 import { formatEng } from '../core/units';
+import { instPower } from '../core/energy';
 
 export interface CompDisplay {
   rows: { label: string; value: string; hint?: string }[];
@@ -61,10 +62,7 @@ export function compDisplay(
   if (type !== 'GND' && type !== 'VM' && type !== 'AM') {
     const active = ['V', 'I', 'E', 'F', 'G', 'H', 'OA', 'TS'].includes(type);
     const pRow = d.rows.find((r) => /güç/i.test(r.label));
-    const pNum = res.kind === 'dc' ? res.comps[id]?.P : res.kind === 'ac' ? res.comps[id]?.P : (() => {
-      const vi = compVI(res, id, tIndex);
-      return vi ? vi.V.re * vi.I.re : 0;
-    })();
+    const pNum = res.kind === 'dc' ? res.comps[id]?.P : res.kind === 'ac' ? res.comps[id]?.P : res.comps[id] ? instPower(res.comps[id], stepIndex(res, tIndex)) : 0;
     d.rows.push({
       label: 'Eleman',
       value: `${active ? 'aktif' : 'pasif'}${pRow && pNum !== undefined && Math.abs(pNum) > 1e-15 ? ` — güç ${pNum > 0 ? 'soğuruyor' : 'veriyor'}` : ''}`,
@@ -149,7 +147,7 @@ function baseDisplay(
   const k = stepIndex(res, tIndex);
   const V = c.V[k];
   const I = c.I[k];
-  const P = V * I;
+  const P = instPower(c, k);
   const rows: CompDisplay['rows'] = [
     { label: 'Zaman', value: formatEng(res.t[k], 's') },
     { label: 'Gerilim v(t)', value: formatEng(V, 'V') },

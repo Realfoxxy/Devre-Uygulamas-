@@ -146,7 +146,7 @@ export const DEFAULT_ANALYSIS: AnalysisSettings = {
   pointsPerDecade: 25,
   tStop: null,
   h: null,
-  method: 'be',
+  method: 'trap',
   acMeasure: 'rms',
 };
 
