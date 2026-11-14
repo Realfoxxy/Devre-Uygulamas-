@@ -163,3 +163,37 @@ describe('Denetim regresyonları', () => {
     expect(txt).toContain('OA1    1  2  4  ideal');
   });
 });
+
+describe('Birleşik durum değişkenleri (seri C, paralel L)', () => {
+  const run = (txt: string, tStop: number) => {
+    const nl = parseNetlistText(txt);
+    const r = analyze(nl, { ...DEFAULT_ANALYSIS, type: 'transient', tStop }).result as TranResult;
+    return { nl, r, a: r.secondOrder!.analysis };
+  };
+
+  it('seri iki C: derece 2, durum toplam gerilim, formül simülasyonla eşleşir (ters bağlı C dahil)', async () => {
+    const { completeResponse } = await import('../src/solver/methods/secondOrder');
+    for (const c2 of ['C2 4 0 2u', 'C2 0 4 2u']) {
+      const { nl, r, a } = run(`V1 1 0 DC 10\nR1 1 2 100\nL1 2 3 10m\nC1 3 4 2u\n${c2}`, 4e-3);
+      expect(a.order).toBe(2);
+      expect(a.omega0).toBeCloseTo(10000, 6); // C_eş = 1 µF
+      expect(a.states[0].terms?.map((t) => t.id)).toEqual(['C1', 'C2']);
+      for (let i = 0; i < 2; i++) expect(completeResponse(nl, a, r, i)!.deviation!).toBeLessThan(0.05);
+      // son değer: toplam gerilim 10 V
+      const last = r.t.length - 1;
+      const sign = a.states[0].terms![1].sign;
+      expect(r.comps.C1.V[last] + sign * r.comps.C2.V[last]).toBeCloseTo(10, 1);
+    }
+  });
+
+  it('paralel iki L: derece 2, durum toplam akım (ters bağlı L dahil)', async () => {
+    const { completeResponse } = await import('../src/solver/methods/secondOrder');
+    for (const l2 of ['L2 1 0 2', 'L2 0 1 2']) {
+      const { nl, r, a } = run(`I1 0 1 DC 1\nR1 1 0 0.6667\nL1 1 0 2\n${l2}\nC1 1 0 0.5`, 8);
+      expect(a.order).toBe(2);
+      const k = a.states.findIndex((s) => s.kind === 'L');
+      expect(a.states[k].value).toBeCloseTo(1, 9);
+      expect(completeResponse(nl, a, r, k)!.deviation!).toBeLessThan(0.05);
+    }
+  });
+});

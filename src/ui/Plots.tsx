@@ -139,7 +139,8 @@ export function Plots() {
       const resp = res.secondOrder?.response;
       const st = resp ? res.secondOrder!.analysis.states[resp.index] : undefined;
       const fo = res.firstOrder;
-      const formula = resp && st
+      // birleşik durum (ör. seri iki C'nin toplam gerilimi) tek bir elemanın grafiğine çizilmez
+      const formula = resp && st && !st.terms
         ? { id: st.id, kind: st.kind === 'C' ? ('V' as const) : ('I' as const), f: (t: number) => responseEval(resp, t) }
         : fo?.elem && fo.intervals.every((iv) => iv.model)
           ? { id: fo.elem, kind: fo.kind === 'C' ? ('V' as const) : ('I' as const), f: (t: number) => { const iv = fo.intervals.find((x) => t >= x.t0 - 1e-15 && t <= x.t1 + 1e-15) ?? fo.intervals[fo.intervals.length - 1]; return foEval(iv, t); } }

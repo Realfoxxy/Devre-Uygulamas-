@@ -172,10 +172,15 @@ export function resolveTiming(nl: Netlist, s: AnalysisSettings, taus: Record<str
     if (!tStop) tStop = 10e-3;
     info.push(`Toplam süre otomatik: ${tStop.toPrecision(3)} s (${maxTau ? '5τ' : 'kaynak dalga biçimine göre'}).`);
   }
+  // τ'su tanımsız kalan C / L varsa (ör. seri iki kapasitör DC'de açık devre) LC rezonans ölçeği √(LC) de hesaba katılır
+  const Cv = nl.elements.filter((e) => e.type === 'C').map((e) => Number(e.params.value));
+  const Lv = nl.elements.filter((e) => e.type === 'L').map((e) => Number(e.params.value));
+  const untimed = nl.elements.some((e) => (e.type === 'C' || e.type === 'L') && !Object.keys(taus).some((k) => k === e.id || k.startsWith(`${e.id}@`)));
+  const lcScale = untimed && Cv.length && Lv.length ? Math.sqrt(Math.min(...Lv) * Math.min(...Cv)) : Infinity;
   let h = s.h && s.h > 0 ? s.h : 0;
   if (!h) {
-    h = Math.min(minTau / 50, minScale / 50, tStop / 200);
-    info.push(`Zaman adımı otomatik: h = ${h.toPrecision(3)} s (en küçük τ, darbe genişliği ya da periyodun 1/50'si).`);
+    h = Math.min(minTau / 50, minScale / 50, lcScale / 50, tStop / 200);
+    info.push(`Zaman adımı otomatik: h = ${h.toPrecision(3)} s (en küçük τ, √(LC), darbe genişliği ya da periyodun 1/50'si).`);
   }
   const swTimes = nl.elements.filter((e) => e.type === 'SW' || e.type === 'SW2').flatMap((e) => (e.params.times ?? []).filter((x) => x > 0 && x < tStop));
   const bps = [...new Set([...sources.flatMap((e) => breakpoints(e.params, tStop)), ...swTimes].map((t) => +t.toPrecision(12)))].sort((x, y) => x - y);

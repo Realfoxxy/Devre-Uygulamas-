@@ -15,7 +15,22 @@ export interface StateVar {
   /** Paralel C / seri L birleşmesiyle eşdeğer değer */
   value: number;
   merged: string[];
+  /** Seri C / paralel L birleşmesinde durum değişkeni elemanların toplamıdır: Σ sign·(v ya da i) */
+  terms?: { id: string; sign: number }[];
 }
+
+/** Durum değişkeninin simülasyondaki değeri (birleşik durumlarda elemanların işaretli toplamı) */
+export function stateSim(res: TranResult, s: StateVar, k: number): number {
+  const at = (id: string) => (s.kind === 'C' ? res.comps[id].V[k] : res.comps[id].I[k]);
+  return s.terms ? s.terms.reduce((a, t) => a + t.sign * at(t.id), 0) : at(s.id);
+}
+
+const addTerm = (s: StateVar, id: string, sign: number) => {
+  s.terms ??= [{ id: s.id, sign: 1 }];
+  s.terms.push({ id, sign });
+  const x = s.kind === 'C' ? 'v' : 'i';
+  s.name = `(${s.terms.map((t, i) => `${i ? (t.sign > 0 ? ' + ' : ' − ') : ''}${x}_${t.id}`).join('')})`;
+};
 
 export type Damping = 'over' | 'critical' | 'under' | 'undamped' | 'first' | 'higher' | 'unstable';
 
@@ -91,14 +106,17 @@ export function findStates(nl: Netlist): { states: StateVar[]; dependent: { id: 
       continue;
     }
     // seri kapasitör: bir ara düğümü yalnızca iki kapasitör paylaşıyorsa eşdeğer C'ye indirgenir
-    const seriesPartner = states.find((s) => {
-      if (s.kind !== 'C') return false;
+    const midOf = (s: StateVar) => {
       const o = Cs.find((x) => x.id === s.id)!;
-      const shared = c.nodes.filter((k) => o.nodes.includes(k));
-      return shared.some((k) => activeEls.filter((e) => e.nodes.includes(k)).length === 2);
-    });
+      return c.nodes.find((k) => o.nodes.includes(k) && activeEls.filter((e) => e.nodes.includes(k)).length === 2);
+    };
+    const seriesPartner = states.find((s) => s.kind === 'C' && midOf(s) !== undefined);
     if (seriesPartner) {
       const cVal = Number(c.params.value);
+      // durum = ortak eleman yönünde toplam gerilim; ortak düğüm iki elemanda aynı uçtaysa gerilimler ters yönlü
+      const mid = midOf(seriesPartner)!;
+      const po = Cs.find((x) => x.id === seriesPartner.id)!;
+      addTerm(seriesPartner, c.id, po.nodes.indexOf(mid) === c.nodes.indexOf(mid) ? -1 : 1);
       seriesPartner.value = (seriesPartner.value * cVal) / (seriesPartner.value + cVal);
       seriesPartner.merged.push(c.id);
       mergedTo.set(c.id, seriesPartner.id);
@@ -149,6 +167,7 @@ export function findStates(nl: Netlist): { states: StateVar[]; dependent: { id: 
         const lVal = Number(l.params.value);
         twin.value = (twin.value * lVal) / (twin.value + lVal);
         twin.merged.push(l.id);
+        addTerm(twin, l.id, Ls.find((x) => x.id === twin.id)!.nodes[0] === l.nodes[0] ? 1 : -1);
         mergedTo.set(l.id, twin.id);
         dependent.push({ id: l.id, reason: `${l.id}, ${twin.id} ile paralel: ikisi tek durum değişkeni sayılır (L_eş = ${formatEng(twin.value, 'H')}).` });
         return;
@@ -504,8 +523,7 @@ export function completeResponse(nl: Netlist, so: SecondOrderResult, res: TranRe
   const laterSwitch = nl.elements.some((e) => (e.type === 'SW' || e.type === 'SW2') && (e.params.times ?? []).some((t) => t > 0));
   const st = so.states[outIndex];
   const unit = st.kind === 'C' ? 'V' : 'A';
-  const sim0 = (s: StateVar) => (s.kind === 'C' ? res.comps[s.id].V[0] : res.comps[s.id].I[0]);
-  const x0 = so.states.map(sim0);
+  const x0 = so.states.map((s) => stateSim(res, s, 0));
   const srcEls = so.inputs.map((id) => nl.elements.find((e) => e.id === id)!);
   const u0 = srcEls.map(waveAt0);
   const dx0 = so.A.map((r, i) => r.reduce((s, a, j) => s + a * x0[j], 0) + so.B[i].reduce((s, b, k) => s + b * u0[k], 0));
@@ -608,7 +626,7 @@ export function completeResponse(nl: Netlist, so: SecondOrderResult, res: TranRe
       .filter((e) => e.type === 'SW' || e.type === 'SW2')
       .flatMap((e) => (e.params.times ?? []).filter((t) => t > 0)),
   );
-  const sim = st.kind === 'C' ? res.comps[st.id].V : res.comps[st.id].I;
+  const sim = Array.from({ length: res.t.length }, (_, k) => stateSim(res, st, k));
   let dev = 0;
   let sc = 1e-15;
   for (let k = 0; k < res.t.length; k++) {
