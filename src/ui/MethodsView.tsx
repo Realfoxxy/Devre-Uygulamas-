@@ -39,7 +39,7 @@ function Equations({ r, kind }: { r: MethodResult; kind: 'node' | 'mesh' }) {
         <div className="eq-block">
           <div className="eq-title">Doğrudan bilinenler</div>
           {r.given.map((g) => (
-            <div key={g} className="eq">{g}</div>
+            <div key={g} className="eq" tabIndex={0}>{g}</div>
           ))}
         </div>
       )}
@@ -47,15 +47,15 @@ function Equations({ r, kind }: { r: MethodResult; kind: 'node' | 'mesh' }) {
         <div className="eq-block">
           <div className="eq-title">Kontrol büyüklükleri</div>
           {r.defs.map((d) => (
-            <div key={d} className="eq">{d}</div>
+            <div key={d} className="eq" tabIndex={0}>{d}</div>
           ))}
         </div>
       )}
       {r.equations.map((e, i) => (
         <div key={i} className="eq-block">
           <div className="eq-title">{e.title}</div>
-          <div className="eq">{e.text}</div>
-          {e.simplified !== e.text && <div className="eq simp">⇒ {e.simplified}</div>}
+          <div className="eq" tabIndex={0}>{e.text}</div>
+          {e.simplified !== e.text && <div className="eq simp" tabIndex={0}>⇒ {e.simplified}</div>}
         </div>
       ))}
       {r.unknowns.length > 0 && (
@@ -146,7 +146,14 @@ export function MethodsView({ tab }: { tab: 'node' | 'mesh' }) {
         <div className="issue warning">{m.mesh?.message}</div>
       )}
       <div className="copy-row">
-        <CopyButton label="SPICE (.cir)" text={() => toSpice(m.nl, meta.deney || 'Devre Lab Simülatörü')} />
+        <CopyButton
+          label="SPICE (.cir)"
+          text={() => {
+            const st = useStore.getState();
+            const tr = st.results?.kind === 'transient' ? st.results : null;
+            return toSpice(m.nl, meta.deney || 'Devre Lab Simülatörü', { analysis: st.doc.analysis, tStop: tr?.tStop, h: tr?.h });
+          }}
+        />
       </div>
       <details className="small">
         <summary>Netlist</summary>

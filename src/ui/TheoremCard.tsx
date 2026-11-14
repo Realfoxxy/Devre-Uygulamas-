@@ -331,7 +331,7 @@ function TransformCard({ card }: { card: Extract<Card, { tool: 'transform' }> })
         <div className="issue warning">{t.message}</div>
       ) : (
         <>
-          <p className="eq small">{t.text}</p>
+          <p className="eq small" tabIndex={0}>{t.text}</p>
           {before && after && others.length > 0 && (
             <table className="grid-table">
               <thead>

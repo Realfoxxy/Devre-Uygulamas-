@@ -89,7 +89,7 @@ export function SecondOrderCard() {
       ))}
       <div className="eq-title">Durum denklemleri (dx/dt = A·x + B·u)</div>
       {so.stateEquations.map((e, i) => (
-        <div key={i} className="eq">
+        <div key={i} className="eq" tabIndex={0}>
           {e}
         </div>
       ))}
@@ -106,9 +106,9 @@ export function SecondOrderCard() {
           </select>
         </label>
       )}
-      {so.odeText && <div className="eq">{so.odeText}</div>}
+      {so.odeText && <div className="eq" tabIndex={0}>{so.odeText}</div>}
       <div className="eq-title">Karakteristik denklem det(sI − A) = 0</div>
-      <div className="eq simp">{so.polyText}</div>
+      <div className="eq simp" tabIndex={0}>{so.polyText}</div>
       {so.order === 2 && so.alpha !== undefined && (
         <p className="small">
           α = {num(so.alpha)} 1/s, ω₀ = {num(so.omega0!)} rad/s
@@ -151,7 +151,7 @@ export function SecondOrderCard() {
         <>
           <div className="eq-title">Tam yanıt x = x_n + x_f</div>
           <div className="small">{resp.forcedText}</div>
-          <div className="eq simp">{resp.formula}</div>
+          <div className="eq simp" tabIndex={0}>{resp.formula}</div>
           {resp.note && <div className="issue info">{resp.note}</div>}
           {resp.deviation !== undefined && (
             <div className={`small ${resp.deviation <= 0.5 ? 'ok-text' : 'bad-text'}`}>Formül ile simülasyon farkı: %{resp.deviation.toFixed(2)} {resp.deviation <= 0.5 ? '✓' : ''}</div>

@@ -74,6 +74,9 @@ export function Splitter({
       role="separator"
       aria-orientation={dir === 'x' ? 'vertical' : 'horizontal'}
       aria-label={label}
+      aria-valuenow={Math.round(value)}
+      aria-valuemin={min}
+      aria-valuemax={Math.round(max())}
       title={`${label} — sürükleyin, çift tıklayınca varsayılan boyut`}
       tabIndex={0}
       onPointerDown={onPointerDown}

@@ -260,7 +260,7 @@ export function Toolbar({ onExport, onTogglePalette, onTogglePanel }: { onExport
           <rect width="32" height="32" rx="7" fill="#2557d6" />
           <path d="M4 16h5l2-5 3 10 3-10 3 10 2-5h6" fill="none" stroke="white" strokeWidth="2.4" strokeLinejoin="round" />
         </svg>
-        <span className="brand-name">Devre Lab</span>
+        <h1 className="brand-name">Devre Lab</h1>
       </div>
       <FileMenu />
       <ExamplesMenu />

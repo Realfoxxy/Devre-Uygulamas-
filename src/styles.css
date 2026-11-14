@@ -47,6 +47,7 @@ kbd {
   background: var(--panel); border-bottom: 1px solid var(--line); min-width: 0; flex-wrap: nowrap;
 }
 .brand { display: flex; align-items: center; gap: 8px; font-weight: 700; margin-right: 4px; white-space: nowrap; }
+.brand-name { margin: 0; font-size: inherit; font-weight: inherit; line-height: inherit; }
 .tb-sep { width: 1px; height: 24px; background: var(--line); margin: 0 2px; }
 .tb-spacer { flex: 1; }
 .tb-group { display: flex; gap: 2px; }
@@ -325,7 +326,7 @@ p.eq { margin: 0; white-space: normal; }
 .modal-back { position: fixed; inset: 0; background: rgba(20, 28, 45, 0.4); display: flex; align-items: center; justify-content: center; z-index: 100; padding: 16px; }
 .modal { background: #fff; border-radius: 12px; width: min(560px, 100%); max-height: 100%; overflow-y: auto; padding: 18px 20px; display: flex; flex-direction: column; gap: 12px; box-shadow: 0 20px 60px rgba(0,0,0,0.25); }
 .modal-head { display: flex; justify-content: space-between; align-items: center; }
-.modal-head h3 { margin: 0; font-size: 17px; }
+.modal-head h2 { margin: 0; font-size: 17px; }
 .form { display: flex; flex-direction: column; gap: 10px; }
 .form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
 .form label { display: flex; flex-direction: column; gap: 4px; font-size: 12.5px; color: var(--muted); }
@@ -372,7 +373,8 @@ p.eq { margin: 0; white-space: normal; }
   .toolbar { gap: 6px; padding: 6px 8px; flex-wrap: wrap; }
   .tb-analysis { order: 10; flex-basis: 100%; gap: 6px; }
   .tb-analysis .run { margin-left: auto; }
-  .brand-name { display: none; }
+  /* telefonda görünmez ama ekran okuyucu için sayfa başlığı kalır */
+  .brand-name { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
   .tb-sep { display: none; }
   .btn { padding: 6px 9px; }
   .seg button { padding: 6px 8px; }
