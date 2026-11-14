@@ -12,8 +12,18 @@ export type Pt = [number, number];
 export interface Params {
   /** R: Ω, C: F, L: H, V/I DC: V/A */
   value?: number;
-  /** Kaynaklar için: DC ya da AC (sinüs) */
-  mode?: 'DC' | 'AC';
+  /** Kaynak dalga biçimi */
+  mode?: SourceMode;
+  /** Dalga biçimi parametreleri: w0 / w1 iki seviye, td gecikme (t₀), pw darbe genişliği, per periyot,
+   *  wk katsayı K, wb üstel katsayı b, pwl (t, değer) noktaları */
+  w0?: number;
+  w1?: number;
+  td?: number;
+  pw?: number;
+  per?: number;
+  wk?: number;
+  wb?: number;
+  pwl?: [number, number][];
   /** AC tepe genlik */
   amp?: number;
   /** AC frekans (Hz) */
@@ -53,6 +63,19 @@ export interface Params {
   /** İki yollu anahtar: ortak uç hangi konumda */
   way?: 'A' | 'B';
 }
+
+export type SourceMode = 'DC' | 'AC' | 'STEP' | 'PULSE' | 'EXP' | 'RAMP' | 'SINE_U' | 'PWL';
+
+export const SOURCE_MODES: { mode: SourceMode; label: string; formula: string }[] = [
+  { mode: 'DC', label: 'DC', formula: 'K' },
+  { mode: 'AC', label: 'AC (sürekli sinüs, fazör)', formula: 'A·sin(ωt + θ)' },
+  { mode: 'STEP', label: 'Basamak u(t)', formula: 'V₀ (t < t₀), V₁ (t ≥ t₀)' },
+  { mode: 'PULSE', label: 'Darbe / kare dalga', formula: 'V₁ ile V₂ arasında periyodik' },
+  { mode: 'EXP', label: 'Üstel', formula: 'K·e^(−b(t − t₀))·u(t − t₀)' },
+  { mode: 'RAMP', label: 'Rampa', formula: 'K·(t − t₀)·u(t − t₀)' },
+  { mode: 'SINE_U', label: 'Anahtarlanan sinüs', formula: 'A·sin(ωt + θ)·u(t − t₀)' },
+  { mode: 'PWL', label: 'Parçalı doğrusal', formula: '(t, değer) noktaları arasında doğrusal' },
+];
 
 export interface Component {
   id: string;

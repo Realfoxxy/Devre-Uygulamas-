@@ -8,6 +8,7 @@ import type { TranResult } from '../core/results';
 import { luFactor, luSolve, LUReal, SingularMatrixError } from './lu';
 import { MNASystem } from './mna';
 import { makeCtx, measureElement, newSystem, solutionFrom, stampAll, StampCtx } from './stamp';
+import { breakpoints, waveTimes } from './waveform';
 
 export { sourceAt } from './waveform';
 
@@ -53,49 +54,70 @@ export function theveninResistance(nl: Netlist, a: number, b: number, exclude: S
 export interface TranTiming {
   h: number;
   tStop: number;
-  steps: number;
+  /** Zaman noktaları (kırılma noktalarına hizalı) */
+  grid: Float64Array;
+  /** Kırılma noktasına denk gelen adım indeksleri (sonraki adım geri Euler) */
+  breaks: Set<number>;
   info: string[];
 }
 
 export function resolveTiming(nl: Netlist, s: AnalysisSettings, taus: Record<string, number>): TranTiming {
   const info: string[] = [];
-  const tv = Object.values(taus);
-  const freqs = nl.elements
-    .filter((e) => (e.type === 'V' || e.type === 'I') && e.params.mode === 'AC' && Number(e.params.freq) > 0)
-    .map((e) => Number(e.params.freq));
+  const tv = Object.values(taus).filter((x) => x > 0);
+  const sources = nl.elements.filter((e) => e.type === 'V' || e.type === 'I');
+  const times = sources.map((e) => waveTimes(e.params));
   const minTau = tv.length ? Math.min(...tv) : Infinity;
   const maxTau = tv.length ? Math.max(...tv) : 0;
-  const minPeriod = freqs.length ? 1 / Math.max(...freqs) : Infinity;
-  const maxPeriod = freqs.length ? 1 / Math.min(...freqs) : 0;
+  const minScale = Math.min(...times.map((x) => x.minScale), Infinity);
+  const lastEvent = Math.max(0, ...times.map((x) => x.end));
 
   let tStop = s.tStop && s.tStop > 0 ? s.tStop : 0;
   if (!tStop) {
-    tStop = Math.max(5 * maxTau, 5 * maxPeriod);
+    tStop = Math.max(lastEvent + 5 * maxTau, 5 * maxTau, lastEvent);
     if (!tStop) tStop = 10e-3;
-    info.push(`Toplam süre otomatik: ${tStop.toPrecision(3)} s (${maxTau ? '5τ' : '5 periyot'}).`);
+    info.push(`Toplam süre otomatik: ${tStop.toPrecision(3)} s (${maxTau ? '5τ' : 'kaynak dalga biçimine göre'}).`);
   }
   let h = s.h && s.h > 0 ? s.h : 0;
   if (!h) {
-    h = Math.min(minTau / 50, minPeriod / 50, tStop / 200);
-    info.push(`Zaman adımı otomatik: h = ${h.toPrecision(3)} s (en küçük τ veya periyodun 1/50'si).`);
+    h = Math.min(minTau / 50, minScale / 50, tStop / 200);
+    info.push(`Zaman adımı otomatik: h = ${h.toPrecision(3)} s (en küçük τ, darbe genişliği ya da periyodun 1/50'si).`);
   }
-  let steps = Math.ceil(tStop / h - 1e-9);
-  if (steps > MAX_STEPS) {
-    steps = MAX_STEPS;
-    info.push(`Adım sayısı ${MAX_STEPS} ile sınırlandı; zaman adımı büyütüldü.`);
+  const bps = [...new Set(sources.flatMap((e) => breakpoints(e.params, tStop)).map((t) => +t.toPrecision(12)))].sort((x, y) => x - y);
+  const build = (hh: number) => {
+    const g: number[] = [0];
+    const br = new Set<number>();
+    let prev = 0;
+    for (const next of [...bps, tStop]) {
+      if (next <= prev + 1e-15) continue;
+      const n = Math.max(1, Math.ceil((next - prev) / hh - 1e-9));
+      const dt = (next - prev) / n;
+      for (let i = 1; i <= n; i++) g.push(i === n ? next : prev + i * dt);
+      if (next !== tStop) br.add(g.length - 1);
+      prev = next;
+    }
+    return { g, br };
+  };
+  let { g, br } = build(h);
+  if (g.length - 1 > MAX_STEPS) {
+    const h2 = (h * (g.length - 1)) / MAX_STEPS;
+    ({ g, br } = build(h2));
+    while (g.length - 1 > MAX_STEPS && h < tStop) ({ g, br } = build((h = h * 1.5)));
+    info.push(
+      `Adım sayısı ${MAX_STEPS} sınırını aşacaktı: zaman adımı otomatik büyütüldü. Daha hassas sonuç için süreyi kısaltın ya da adımı büyütün.`,
+    );
+    h = h2;
   }
-  steps = Math.max(steps, 1);
-  h = tStop / steps;
-  return { h, tStop, steps, info };
+  return { h, tStop, grid: Float64Array.from(g), breaks: br, info };
 }
 
 export function solveTransient(nl: Netlist, s: AnalysisSettings): { result: TranResult; info: string[] } {
   const taus = computeTaus(nl);
-  const { h, tStop, steps, info } = resolveTiming(nl, s, taus);
+  const { h, tStop, grid, breaks, info } = resolveTiming(nl, s, taus);
+  const steps = grid.length - 1;
   const n = nl.nodeCount;
   const els = nl.elements;
 
-  const t = new Float64Array(steps + 1);
+  const t = grid;
   const nodeV: Float64Array[] = Array.from({ length: n + 1 }, () => new Float64Array(steps + 1));
   const cV: Record<string, Float64Array> = {};
   const cI: Record<string, Float64Array> = {};
@@ -133,7 +155,7 @@ export function solveTransient(nl: Netlist, s: AnalysisSettings): { result: Tran
   // t = 0: kapasitör v0 değerinde gerilim kaynağı, bobin i0 değerinde akım kaynağı
   let t0ok = false;
   {
-    const ctx0 = makeCtx('tran0', nl, { t: 0, h, state });
+    const ctx0 = makeCtx('tran0', nl, { t: 0, h: t[1] - t[0], state });
     const sys0 = newSystem(nl, ctx0, false);
     stampAll(sys0, nl, ctx0);
     try {
@@ -145,34 +167,36 @@ export function solveTransient(nl: Netlist, s: AnalysisSettings): { result: Tran
     }
   }
 
-  // Matris yalnızca yöntem (BE / trapez) değişince yeniden ayrıştırılır;
+  // Matris yalnızca adım uzunluğu ya da yöntem değişince yeniden ayrıştırılır;
   // her adımda sadece sağ taraf yeniden damgalanır.
-  const ctx = makeCtx('tran', nl, { h, state, t: h, trap: false });
+  const ctx = makeCtx('tran', nl, { h: t[1] - t[0], state, t: t[1], trap: false });
   const systems = new Map<string, { sys: MNASystem; lu: LUReal }>();
-  const systemFor = (trap: boolean, track = false) => {
-    const key = trap ? 'trap' : 'be';
+  const systemFor = (dt: number, trap: boolean, track = false) => {
+    const key = `${trap ? 'trap' : 'be'}|${dt.toPrecision(10)}`;
     let entry = systems.get(key);
     if (!entry) {
       ctx.trap = trap;
+      ctx.h = dt;
       const sys = newSystem(nl, ctx, track);
       stampAll(sys, nl, ctx);
       entry = { sys, lu: luFactor(sys.realMatrix(), sys.N) };
       sys.rhsOnly = true;
+      if (systems.size > 64) systems.clear();
       systems.set(key, entry);
     }
     return entry;
   };
 
-  // "Çözümü göster" için ilk adımın sistemi (geri Euler)
-  const first = systemFor(false, true);
   const useTrap = s.method === 'trap';
   let dump: TranResult['system'] | null = null;
 
   for (let k = 1; k <= steps; k++) {
-    t[k] = k * h;
-    const trap = useTrap && k > 1; // ilk adım her zaman geri Euler
-    const { sys, lu } = k === 1 ? first : systemFor(trap);
+    const dt = t[k] - t[k - 1];
+    // ilk adımda ve her kırılma noktasından sonraki adımda geri Euler (trapez ani kenarlarda salınım yapar)
+    const trap = useTrap && k > 1 && !breaks.has(k - 1);
+    const { sys, lu } = systemFor(dt, trap, k === 1);
     ctx.t = t[k];
+    ctx.h = dt;
     ctx.trap = trap;
     sys.clearRhs();
     stampAll(sys, nl, ctx);
@@ -181,7 +205,7 @@ export function solveTransient(nl: Netlist, s: AnalysisSettings): { result: Tran
       dump = sys.dump(
         { re: x },
         false,
-        `Geçici rejim, ilk adım (t = h = ${h.toPrecision(4)} s, geri Euler). Kapasitör: G = C/h ve I = (C/h)·v(n−1); bobin: G = h/L ve I = i(n−1).`,
+        `Geçici rejim, ilk adım (t = h = ${dt.toPrecision(4)} s, geri Euler). Kapasitör: G = C/h ve I = (C/h)·v(n−1); bobin: G = h/L ve I = i(n−1).`,
       );
     }
     record(k, sys, x, ctx);

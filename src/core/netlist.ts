@@ -12,6 +12,7 @@ import {
   ptKey,
 } from './circuit';
 import { formatEng } from './units';
+import { waveDescription } from '../solver/waveform';
 
 export interface NetElement {
   id: string;
@@ -213,6 +214,7 @@ export function describeValue(type: CompType, p: Params): string {
         const ph = p.phase ? ` ∠${+(p.phase ?? 0).toFixed(1)}°` : '';
         return `${formatEng(p.amp ?? 0, u)}${ph} ~ ${formatEng(p.freq ?? 0, 'Hz')}`;
       }
+      if (p.mode && p.mode !== 'DC') return waveDescription(p, u, formatEng);
       return `${formatEng(p.value ?? 0, u)} DC`;
     }
     case 'E':
@@ -258,7 +260,7 @@ export function netlistText(nl: Netlist): string {
           break;
         case 'V':
         case 'I':
-          val = p.mode === 'AC' ? `AC ${p.amp} ${p.freq}Hz ${p.phase ?? 0}°` : `DC ${p.value}`;
+          val = p.mode === 'AC' ? `AC ${p.amp} ${p.freq}Hz ${p.phase ?? 0}°` : p.mode && p.mode !== 'DC' ? describeValue(e.type, p) : `DC ${p.value}`;
           break;
         case 'E':
         case 'F':

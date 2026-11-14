@@ -34,8 +34,8 @@ export const MAX_WIRES = 3000;
 const ID_RE = /^[A-Za-z0-9]{1,16}$/;
 
 /** Bileşen parametrelerinde kabul edilen alanlar (bilinmeyenler atılır). */
-const NUMERIC_PARAMS = ['value', 'amp', 'freq', 'phase', 'v0', 'i0', 'gain', 'gainA', 'rin', 'rout', 'vos', 'ib', 'vsat', 'isat', 'slew', 'pos', 'kT', 'tempC', 'vmin', 'vmax', 'rMeter'] as const;
-const MODE_VALUES = ['DC', 'AC'];
+const NUMERIC_PARAMS = ['value', 'amp', 'freq', 'phase', 'v0', 'i0', 'gain', 'w0', 'w1', 'td', 'pw', 'per', 'wk', 'wb', 'gainA', 'rin', 'rout', 'vos', 'ib', 'vsat', 'isat', 'slew', 'pos', 'kT', 'tempC', 'vmin', 'vmax', 'rMeter'] as const;
+const MODE_VALUES = ['DC', 'AC', 'STEP', 'PULSE', 'EXP', 'RAMP', 'SINE_U', 'PWL'];
 
 class FileError extends Error {}
 
@@ -54,6 +54,14 @@ function cleanParams(type: CompType, raw: unknown): Params {
   if (typeof r.mode === 'string' && MODE_VALUES.includes(r.mode)) out.mode = r.mode as Params['mode'];
   if (r.model === 'ideal' || r.model === 'finite' || r.model === 'offset') out.model = r.model;
   if (r.way === 'A' || r.way === 'B') out.way = r.way;
+  if (Array.isArray(r.pwl)) {
+    const pts = (r.pwl as unknown[])
+      .slice(0, 200)
+      .filter((q): q is [number, number] => Array.isArray(q) && finite(q[0]) && finite(q[1]))
+      .map((q) => [q[0], q[1]] as [number, number])
+      .sort((a, b) => a[0] - b[0]);
+    if (pts.length) out.pwl = pts;
+  }
   if (typeof r.real === 'boolean') out.real = r.real;
   if (out.pos !== undefined) out.pos = Math.min(1, Math.max(0, out.pos));
   const c = r.ctrl as Record<string, unknown> | undefined;
