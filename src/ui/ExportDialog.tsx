@@ -164,7 +164,7 @@ export function ExportDialog({ onClose }: { onClose: () => void }) {
     <div className="modal-back" onPointerDown={(e) => e.target === e.currentTarget && onClose()}>
       <div className="modal" role="dialog" aria-label="PDF rapor">
         <div className="modal-head">
-          <h3>PDF rapor</h3>
+          <h2>PDF rapor</h2>
           <button className="icon-btn" onClick={onClose} aria-label="Kapat">✕</button>
         </div>
         <div className="form">

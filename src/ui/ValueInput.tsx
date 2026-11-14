@@ -22,7 +22,10 @@ export function ValueInput({
   const [text, setText] = useState(formatInput(value));
   const [bad, setBad] = useState(false);
   const ref = useRef<HTMLInputElement>(null);
+  /** Son kaydedilen değer: Enter ardından gelen blur aynı değeri ikinci kez kaydetmesin (çift geri alma adımı) */
+  const lastRef = useRef(value);
   useEffect(() => {
+    lastRef.current = value;
     setText(formatInput(value));
     setBad(false);
   }, [value]);
@@ -40,7 +43,8 @@ export function ValueInput({
     if (text.trim() === '') {
       if (allowEmpty) {
         setBad(false);
-        onCommit(undefined);
+        if (lastRef.current !== undefined) onCommit(undefined);
+        lastRef.current = undefined;
       } else setText(formatInput(value));
       return;
     }
@@ -50,7 +54,8 @@ export function ValueInput({
       return;
     }
     setBad(false);
-    if (v !== value) onCommit(v);
+    if (v !== lastRef.current) onCommit(v);
+    lastRef.current = v;
     setText(formatInput(v));
   };
 

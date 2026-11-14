@@ -5,10 +5,12 @@ import { cx } from '../core/complex';
 import type { AnalysisSettings } from '../core/circuit';
 import type { Netlist } from '../core/netlist';
 import type { TranResult } from '../core/results';
+import { formatEng } from '../core/units';
 import { luFactor, luSolve, LUReal, SingularMatrixError } from './lu';
 import { MNASystem } from './mna';
 import { makeCtx, measureElement, newSystem, solutionFrom, stampAll, StampCtx } from './stamp';
 import { breakpoints, sourceAt, waveTimes } from './waveform';
+import { secondOrderAnalysis } from './methods/secondOrder';
 import { switchClosed, switchToggles, sw2Way } from './stamp';
 
 export { sourceAt } from './waveform';
@@ -119,9 +121,10 @@ export function computeTaus(nl: Netlist, swTime?: number): Record<string, number
   for (const x of nl.elements) {
     if (x.type !== 'C' && x.type !== 'L') continue;
     const r = theveninResistance(nl, x.nodes[0], x.nodes[1], new Set([x.id]), swTime);
-    if (r === null || !(r > 1e-9) || r > 1e9) continue;
+    // negatif R_th (bağımlı kaynak) büyüyen bir yanıt verir: |τ| yine de zaman ölçeğidir
+    if (r === null || !(Math.abs(r) > 1e-9) || Math.abs(r) > 1e9) continue;
     const val = Number(x.params.value);
-    taus[x.id] = x.type === 'C' ? r * val : val / r;
+    taus[x.id] = x.type === 'C' ? Math.abs(r) * val : val / Math.abs(r);
   }
   return taus;
 }
@@ -176,7 +179,17 @@ export function resolveTiming(nl: Netlist, s: AnalysisSettings, taus: Record<str
   const Cv = nl.elements.filter((e) => e.type === 'C').map((e) => Number(e.params.value));
   const Lv = nl.elements.filter((e) => e.type === 'L').map((e) => Number(e.params.value));
   const untimed = nl.elements.some((e) => (e.type === 'C' || e.type === 'L') && !Object.keys(taus).some((k) => k === e.id || k.startsWith(`${e.id}@`)));
-  const lcScale = untimed && Cv.length && Lv.length ? Math.sqrt(Math.min(...Lv) * Math.min(...Cv)) : Infinity;
+  let lcScale = untimed && Cv.length && Lv.length ? Math.sqrt(Math.min(...Lv) * Math.min(...Cv)) : Infinity;
+  if (untimed && !Number.isFinite(minTau)) {
+    // hiçbir τ hesaplanamadıysa devrenin doğal frekansları kullanılır: en hızlı kip 1/max|s|
+    try {
+      const so = secondOrderAnalysis(nl);
+      const mags = so.ok ? so.roots.map((z) => Math.hypot(z.re, z.im)).filter((m) => m > 0 && Number.isFinite(m)) : [];
+      if (mags.length) lcScale = Math.min(lcScale, 1 / Math.max(...mags));
+    } catch {
+      /* isteğe bağlı */
+    }
+  }
   let h = s.h && s.h > 0 ? s.h : 0;
   if (!h) {
     h = Math.min(minTau / 50, minScale / 50, lcScale / 50, tStop / 200);
@@ -201,16 +214,28 @@ export function resolveTiming(nl: Netlist, s: AnalysisSettings, taus: Record<str
     }
     return { g, br };
   };
-  let { g, br } = build(h);
-  if (g.length - 1 > MAX_STEPS) {
-    const h2 = (h * (g.length - 1)) / MAX_STEPS;
-    ({ g, br } = build(h2));
-    while (g.length - 1 > MAX_STEPS && h < tStop) ({ g, br } = build((h = h * 1.5)));
+  // Adım sayısı diziyi kurmadan önce tahmin edilir: zaman sabitleri çok farklıysa (ör. τ = 1 ns ve 1 s)
+  // h = τ_min/50 ile milyarlarca nokta oluşur ve dizi kurulamaz.
+  const estimate = (hh: number) => {
+    let count = 0;
+    let prev = 0;
+    for (const next of [...bps, tStop]) {
+      if (next <= prev + 1e-15) continue;
+      const k = Math.max(1, Math.ceil((next - prev) / hh - 1e-9));
+      count += k + (k > 1 ? 4 : 0);
+      prev = next;
+    }
+    return count;
+  };
+  if (estimate(h) > MAX_STEPS) {
+    let hh = Math.max(h, tStop / MAX_STEPS);
+    while (estimate(hh) > MAX_STEPS && hh < tStop) hh *= 1.25;
+    h = hh;
     info.push(
-      `Adım sayısı ${MAX_STEPS} sınırını aşacaktı: zaman adımı otomatik büyütüldü. Daha hassas sonuç için süreyi kısaltın ya da adımı büyütün.`,
+      `Adım sayısı ${MAX_STEPS} sınırını aşacaktı: zaman adımı h = ${h.toPrecision(3)} s'ye büyütüldü. Daha hassas sonuç için süreyi kısaltın ya da adımı büyütün.`,
     );
-    h = h2;
   }
+  const { g, br } = build(h);
   return { h, tStop, grid: Float64Array.from(g), breaks: br, info };
 }
 
@@ -339,6 +364,10 @@ export function solveTransient(nl: Netlist, s: AnalysisSettings): { result: Tran
   };
 
   const useTrap = s.method === 'trap';
+  // t = 0 çözülemediyse (ör. kapasitör doğrudan gerilim kaynağına paralel ve elle verilen v(0) kaynakla
+  // çelişiyor) ilk adım bir darbe akımı taşır. İkinci adım da geri Euler atılır: trapez bu darbeyi
+  // "hatırlayıp" her adımda işaret değiştiren sahte bir akım üretmesin.
+  if (!t0ok && steps > 1) breaks.add(1);
   // kararsızlık eşiği: kaynak ve başlangıç değerlerinin ölçeği
   let scale = 1e-3;
   for (const e of els) {
@@ -378,7 +407,7 @@ export function solveTransient(nl: Netlist, s: AnalysisSettings): { result: Tran
     // Kararsız devre: değerler başlangıç ölçeğinin 10⁶ katına ulaşınca dur
     let big = 0;
     for (let i = 1; i <= n; i++) big = Math.max(big, Math.abs(nodeV[i][k]));
-    if (big > limit) {
+    if (big > limit && (t0ok || k > 2)) {
       lastStep = k;
       info.push(`Değerler 10⁶ katına ulaştığı için simülasyon t = ${t[k].toPrecision(3)} s'de durduruldu: devre kararsız (doğal yanıt büyüyor).`);
       break;
@@ -386,6 +415,31 @@ export function solveTransient(nl: Netlist, s: AnalysisSettings): { result: Tran
   }
   if (!t0ok) {
     // t = 0 çözülemediyse (ör. kapasitör doğrudan kaynağa paralel) ilk adım kullanılır
+    // yalnızca iki ucu gerilim tipi elemanlarla (kaynak, op-amp çıkışı, ideal ampermetre) bağlı kapasitörler
+    // kaynak tarafından belirlenir; diğerlerinin sıçraması bağımlı kaynak darbesinden gelir
+    const vp = Array.from({ length: n + 1 }, (_, i) => i);
+    const vf = (a: number): number => (vp[a] === a ? a : (vp[a] = vf(vp[a])));
+    for (const e of els) {
+      if (e.type === 'V' || e.type === 'E' || e.type === 'H' || (e.type === 'AM' && !e.params.real)) vp[vf(e.nodes[0])] = vf(e.nodes[1]);
+      else if (e.type === 'OA') vp[vf(e.nodes[2])] = vf(0);
+    }
+    const forced = (e: (typeof els)[number]) => vf(e.nodes[0]) === vf(e.nodes[1]);
+    let otherJump = false;
+    for (const e of els) {
+      if (e.type !== 'C' || (e.params.init ?? (ic.hasSwitch ? 'auto' : 'manual')) !== 'manual') continue;
+      if (!forced(e)) {
+        otherJump ||= Math.abs(cV[e.id][1] - Number(e.params.v0 ?? 0)) > 1e-6 * Math.max(1, Math.abs(cV[e.id][1]));
+        continue;
+      }
+      const v0 = Number(e.params.v0 ?? 0);
+      const v1 = cV[e.id][1];
+      if (Math.abs(v1 - v0) > 1e-6 * Math.max(1, Math.abs(v0), Math.abs(v1)))
+        info.push(
+          `${e.id}: elle girilen başlangıç gerilimi (${formatEng(v0, 'V')}) kullanılamadı; kapasitörün gerilimi bir gerilim kaynağı tarafından ${formatEng(v1, 'V')} olarak belirleniyor (t = 0'da anlık bir darbe akımı akar).`,
+        );
+    }
+    if (otherJump)
+      info.push("t = 0'daki darbe akımı bağımlı kaynaklar üzerinden diğer kapasitörlerin gerilimini de sıçrattı; ilk değerler ideal modelde anlık bir darbenin sonucudur.");
     for (let i = 0; i <= n; i++) nodeV[i][0] = nodeV[i][1];
     for (const e of els) {
       cV[e.id][0] = cV[e.id][1];

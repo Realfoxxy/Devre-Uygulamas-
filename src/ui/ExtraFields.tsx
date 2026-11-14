@@ -29,7 +29,9 @@ function TimesInput({ comp }: { comp: Component }) {
     const vals = parts.map((x) => parseValue(x));
     if (vals.some((v) => v === null)) return setBad(true);
     setBad(false);
-    update(comp.id, { times: (vals as number[]).sort((a, b) => a - b).slice(0, 50) });
+    const times = (vals as number[]).sort((a, b) => a - b).slice(0, 50);
+    // değişmediyse geri alma geçmişine boş adım eklenmez
+    if (JSON.stringify(times) !== JSON.stringify(comp.params.times ?? [])) update(comp.id, { times });
   };
   return (
     <label>

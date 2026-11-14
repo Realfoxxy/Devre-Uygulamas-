@@ -98,8 +98,8 @@ export default function App() {
         onTogglePalette={() => setPaletteOpen((v) => !v)}
         onTogglePanel={() => setPanelOpen((v) => !v)}
       />
-      <div className="main" style={{ '--left-w': `${leftW}px`, '--right-w': `${rightW}px`, '--plots-h': `${plotsH}px` } as React.CSSProperties}>
-        <aside className={`left drawer ${paletteOpen ? 'open' : ''}`}>
+      <main className="main" style={{ '--left-w': `${leftW}px`, '--right-w': `${rightW}px`, '--plots-h': `${plotsH}px` } as React.CSSProperties}>
+        <aside className={`left drawer ${paletteOpen ? 'open' : ''}`} aria-label="Bileşen paleti">
           <Palette onPicked={() => setPaletteOpen(false)} />
         </aside>
         <Splitter dir="x" sign={1} value={leftW} min={150} max={maxSide} onChange={setLeftW} onReset={() => setLeftW(210)} label="Bileşen paneli genişliği" />
@@ -121,14 +121,14 @@ export default function App() {
           </div>
         </section>
         <Splitter dir="x" sign={-1} value={rightW} min={260} max={maxSide} onChange={setRightW} onReset={() => setRightW(340)} label="Sonuç paneli genişliği" />
-        <aside className={`right drawer ${panelOpen ? 'open' : ''}`}>
+        <aside className={`right drawer ${panelOpen ? 'open' : ''}`} aria-label="Özellikler ve sonuçlar">
           <button className="drawer-close only-mobile" onClick={() => setPanelOpen(false)} aria-label="Kapat">✕</button>
           <ResultPanel />
         </aside>
         {(paletteOpen || panelOpen) && <div className="scrim only-mobile" onClick={() => { setPaletteOpen(false); setPanelOpen(false); }} />}
-      </div>
+      </main>
       {exportOpen && <ExportDialog onClose={() => setExportOpen(false)} />}
-      {toast && <div className="toast">{toast}</div>}
+      {toast && <div className="toast" role="status">{toast}</div>}
     </div>
   );
 }

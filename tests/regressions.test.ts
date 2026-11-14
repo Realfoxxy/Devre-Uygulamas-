@@ -197,3 +197,65 @@ describe('Birleşik durum değişkenleri (seri C, paralel L)', () => {
     }
   });
 });
+
+describe('İkinci denetim (ngspice, rastgele devreler, dosya taraması)', () => {
+  it('zaman sabitleri çok farklıysa geçici analiz çökmez, adım sayısı sınırda kalır', async () => {
+    const { MAX_STEPS } = await import('../src/solver/transient');
+    // τ1 = 1 ps, τ2 = 1 s
+    const nl = parseNetlistText('V1 1 0 DC 1\nR1 1 2 1\nC1 2 0 1p\nR2 1 3 1Meg\nC2 3 0 1u');
+    const out = analyze(nl, { ...DEFAULT_ANALYSIS, type: 'transient' });
+    expect(out.ok).toBe(true);
+    expect((out.result as TranResult).t.length).toBeLessThanOrEqual(MAX_STEPS + 10);
+  });
+
+  it('gerilim kaynağına doğrudan paralel kapasitör: trapez sahte salınım üretmez, kullanıcıya not düşülür', () => {
+    const nl = parseNetlistText('V1 1 0 DC 12\nC1 1 0 1u\nR1 1 0 1k');
+    const out = analyze(nl, { ...DEFAULT_ANALYSIS, type: 'transient', method: 'trap' });
+    const r = out.result as TranResult;
+    for (let k = 2; k < r.t.length; k++) expect(Math.abs(r.comps.C1.I[k])).toBeLessThan(1e-9);
+    expect(r.comps.C1.V[r.t.length - 1]).toBeCloseTo(12, 9);
+    expect(out.info.some((s) => /C1: elle girilen başlangıç gerilimi/.test(s))).toBe(true);
+  });
+
+  it('pozitif kökü olan (kararsız) yüksek dereceli devre uyarı verir ve simülasyon durur', () => {
+    const nl = parseNetlistText(
+      'R1 1 0 5700\nR2 2 1 45500\nR3 3 2 1130\nR4 4 2 2170\nR5 5 3 330\nV1 2 0 DC 5.36\nR6 2 3 1300\nL1 2 3 3.74e-7\nE1 5 0 0.17 R4\nL2 1 2 0.000166\nR7 3 5 92.4\nF1 2 1 1.17 L2\nL3 1 0 0.00946',
+    );
+    const out = analyze(nl, { ...DEFAULT_ANALYSIS, type: 'transient' });
+    expect(out.issues.some((i) => /kararsız/.test(i.message))).toBe(true);
+    expect(out.info.some((s) => /durduruldu/.test(s))).toBe(true);
+  });
+
+  it('dosyada prototip adlı bileşen türü ("constructor", "__proto__" …) kabul edilmez', async () => {
+    const { deserialize } = await import('../src/storage/project');
+    for (const type of ['constructor', 'toString', '__proto__', 'hasOwnProperty']) {
+      const doc = deserialize(JSON.stringify({ version: 2, components: [{ id: 'X1', type, x: 0, y: 0, rot: 0, params: {} }, { id: 'R1', type: 'R', x: 4, y: 0, rot: 0, params: { value: 5 } }], wires: [] }));
+      expect(doc.components.map((c) => c.id)).toEqual(['R1']);
+    }
+  });
+
+  it('SPICE dışa aktarma: op-amp, potansiyometre, sensör, iki yollu anahtar, üstel kaynak ve bobin akımı kontrolü yazılır', async () => {
+    const { toSpice } = await import('../src/solver/methods/export');
+    const nl = parseNetlistText('V1 1 0 DC 1\nR1 1 2 1k\nR2 2 3 10k\nOA1 0 2 3 ideal\nPOT1 3 0 4 10k 0.3\nTS1 0 5 1u 25\nR3 5 0 1k\nL1 4 0 1m\nH1 6 0 50 L1\nR4 6 0 1k\nSW1 4 7 0 B 1m\nR5 7 0 1k');
+    nl.elements[0].params = { mode: 'EXP', wk: 5, wb: 1000, td: 0 };
+    const cir = toSpice(nl, 't', { analysis: { ...DEFAULT_ANALYSIS, type: 'transient', tStop: 5e-3, h: 1e-6 } });
+    expect(cir).toMatch(/^EOA1 3 0 0 2 1e\+?9/m);
+    expect(cir).toMatch(/^RPOT1A 3 4 7000/m);
+    expect(cir).toMatch(/^RPOT1B 4 0 3000/m);
+    expect(cir).toMatch(/^ITS1 0 5 DC 0\.00029815/m);
+    expect(cir).toMatch(/^VS_L1 L1_s 0 DC 0/m);
+    expect(cir).toMatch(/^H1 6 0 VS_L1 50/m);
+    // ortak uç 4, A ucu 7, B ucu 0; t < 0'da B konumunda, 1 ms'de A'ya geçer
+    expect(cir).toMatch(/^VSW1_c VSW1_c_n 0 PWL\(0 0 0\.001 0 0\.001000001 1\)/m);
+    expect(cir).toMatch(/^SW1A 4 7 VSW1_c_n 0 SWDL/m);
+    expect(cir).toMatch(/^SW1B 4 0 0 VSW1_c_n SWDLN/m);
+    expect(cir).toMatch(/^V1 1 0 DC 0 PWL\(/m);
+    // anahtarlı devrede başlangıç koşulu otomatiktir: IC ve uic yazılmaz
+    expect(cir).toMatch(/^L1 4 L1_s 0\.001$/m);
+    expect(cir).toMatch(/^\.tran 0\.000001 0\.005 0 0\.000001$/m);
+    // anahtarsız devrede elle başlangıç koşulu (varsayılan 0) IC= ve uic ile yazılır
+    const rc = toSpice(parseNetlistText('V1 1 0 DC 10\nR1 1 2 1k\nC1 2 0 100u'), 't', { analysis: { ...DEFAULT_ANALYSIS, type: 'transient', tStop: 0.5, h: 1e-3 } });
+    expect(rc).toMatch(/^C1 2 0 0\.0001 IC=0$/m);
+    expect(rc).toMatch(/ uic$/m);
+  });
+});

@@ -71,6 +71,13 @@ export function analyze(nl: Netlist, settings: AnalysisSettings): AnalyzeOutput 
           response = null;
         }
         result.secondOrder = { analysis: so, response };
+        const growing = so.roots.filter((z) => z.re > 1e-9 * Math.max(1, Math.hypot(z.re, z.im)));
+        if (growing.length && !result.firstOrder?.unstable)
+          issues.push({
+            level: 'warning',
+            message: `Bu devre kararsız: karakteristik denklemin gerçel kısmı pozitif kökü var (s = ${growing.map((z) => `${formatEng(z.re, '')}${Math.abs(z.im) > 1e-12 ? ` ± j${formatEng(Math.abs(z.im), '')}` : ''}`.trim()).join(', ')} 1/s); doğal yanıt üstel olarak büyür (Bölüm 8.5, 9).`,
+            compIds: [],
+          });
         if (response?.deviation !== undefined && response.deviation > 0.5)
           issues.push({ level: 'warning', message: `İkinci derece formül ile simülasyon %${response.deviation.toFixed(2)} farklı (zaman adımını küçültün ya da trapez yöntemini seçin).`, compIds: [] });
       }

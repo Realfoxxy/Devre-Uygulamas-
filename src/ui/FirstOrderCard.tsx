@@ -80,14 +80,14 @@ export function FirstOrderCard() {
           <div className="eq-title">
             Aralık {i + 1}: {formatEng(iv.t0, 's')} – {formatEng(iv.t1, 's')}
           </div>
-          {iv.tauText && <div className="eq">{iv.tauText}</div>}
+          {iv.tauText && <div className="eq" tabIndex={0}>{iv.tauText}</div>}
           {iv.xinf !== null && (
             <div className="small">
               {fo.symbol}(t₀⁺) = {formatEng(iv.x0, fo.unit!)}, {fo.symbol}(∞) = {formatEng(iv.xinf, fo.unit!)}
             </div>
           )}
           {iv.forcedText && <div className="small">{iv.forcedText}</div>}
-          {iv.formula && <div className="eq simp">{iv.formula}</div>}
+          {iv.formula && <div className="eq simp" tabIndex={0}>{iv.formula}</div>}
           {iv.note && <div className="issue info">{iv.note}</div>}
           {iv.deviation !== undefined && (
             <div className={`small ${iv.deviation <= 0.5 ? 'ok-text' : 'bad-text'}`}>

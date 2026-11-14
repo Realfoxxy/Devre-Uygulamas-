@@ -107,7 +107,7 @@ export function deserialize(text: string): CircuitDoc {
   const components: Component[] = [];
   for (const item of rawComps) {
     const c = item as Record<string, unknown>;
-    if (!c || typeof c !== 'object' || typeof c.type !== 'string' || !(c.type in PARTS)) continue;
+    if (!c || typeof c !== 'object' || typeof c.type !== 'string' || !Object.prototype.hasOwnProperty.call(PARTS, c.type)) continue; // `in` prototipe de bakar ("constructor" …)
     const id = String(c.id ?? '');
     if (!ID_RE.test(id)) throw new FileError(`Geçersiz bileşen adı “${id.slice(0, 20)}”: en fazla 16 harf/rakam olmalı.`);
     if (ids.has(id)) throw new FileError(`Aynı isimde iki bileşen var: ${id}.`);
