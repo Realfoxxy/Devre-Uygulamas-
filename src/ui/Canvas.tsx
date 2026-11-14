@@ -4,8 +4,8 @@ import { Component, CompType, CURRENT_CTRL_TYPES, PARTS, Pt, VOLTAGE_CTRL_TYPES,
 import { pathToSegments, routeWire } from '../core/route';
 import { isStale, useStore } from '../state/store';
 import { G, PartSymbol, Theme } from './parts/symbols';
-import { Schematic, SEL_COLOR } from './Schematic';
-import { compDisplay } from './values';
+import { Schematic, SEL_COLOR, placeFrameTag, placeNodeLabels } from './Schematic';
+import { compDisplay, nodeText } from './values';
 import { buildNetlist } from '../core/netlist';
 import { useMethods } from './useMethods';
 
@@ -63,6 +63,12 @@ function projectOnWire(p: Pt, w: { from: Pt; to: Pt }): Pt {
 export function Canvas() {
   const svgRef = useRef<SVGSVGElement>(null);
   const [view, setView] = useState<View>({ x: 40, y: 40, k: 1 });
+  /** Görünüm son sığdırmadan beri kullanıcı tarafından değiştirilmediyse alan boyutu değişince yeniden sığdırılır */
+  const autoFitRef = useRef(false);
+  const userView: typeof setView = (v) => {
+    autoFitRef.current = false;
+    setView(v);
+  };
   const [hover, setHover] = useState<Pt | null>(null);
   const [wireStart, setWireStart] = useState<Pt | null>(null);
   const [tip, setTip] = useState<{ id: string; x: number; y: number } | null>(null);
@@ -110,13 +116,18 @@ export function Canvas() {
     const add = (x: number, y: number) => {
       x0 = Math.min(x0, x); y0 = Math.min(y0, y); x1 = Math.max(x1, x); y1 = Math.max(y1, y);
     };
-    components.forEach((c) => { add(c.x - 3, c.y - 3); add(c.x + 4, c.y + 3); });
+    // sağ sınır: bileşen adı ve değer etiketi sembolün sağına taşar (ör. "VM1 −5.00 V")
+    components.forEach((c) => { add(c.x - 3, c.y - 3); add(c.x + 7, c.y + 3); });
     wires.forEach((w) => { add(...w.from); add(...w.to); });
     const r = svg.getBoundingClientRect();
+    // sağ alttaki yakınlaştırma düğmelerinin kapladığı şerit kullanılmaz
+    const ZOOM_W = 64;
+    const w = Math.max(100, r.width - ZOOM_W);
     const wpx = (x1 - x0) * G;
     const hpx = (y1 - y0) * G;
-    const k = Math.max(0.3, Math.min(1.6, Math.min(r.width / (wpx + 80), r.height / (hpx + 80))));
-    setView({ k, x: r.width / 2 - ((x0 + x1) / 2) * G * k, y: r.height / 2 - ((y0 + y1) / 2) * G * k });
+    const k = Math.max(0.3, Math.min(1.6, Math.min(w / (wpx + 40), r.height / (hpx + 80))));
+    setView({ k, x: w / 2 - ((x0 + x1) / 2) * G * k, y: r.height / 2 - ((y0 + y1) / 2) * G * k });
+    autoFitRef.current = true;
   }, [components, wires]);
 
   useEffect(() => {
@@ -126,7 +137,7 @@ export function Canvas() {
       const c = useStore.getState().doc.components.find((cc) => cc.id === id);
       const r = svgRef.current?.getBoundingClientRect();
       if (!c || !r) return;
-      setView((v) => ({ ...v, x: r.width / 2 - c.x * G * v.k, y: r.height / 2 - c.y * G * v.k }));
+      userView((v) => ({ ...v, x: r.width / 2 - c.x * G * v.k, y: r.height / 2 - c.y * G * v.k }));
     };
     canvasApi.ghostAtClient = (cx, cy) => {
       const r = svgRef.current?.getBoundingClientRect();
@@ -148,6 +159,27 @@ export function Canvas() {
   fitRef.current = fit;
   useEffect(() => {
     if (useStore.getState().doc.components.length) requestAnimationFrame(() => fitRef.current());
+  }, []);
+  // Grafik paneli açılınca ya da panel boyutu değişince çizim alanı küçülür: devre ekranda kalsın
+  useEffect(() => {
+    const svg = svgRef.current;
+    if (!svg || typeof ResizeObserver === 'undefined') return;
+    let last = '';
+    let raf = 0;
+    const ro = new ResizeObserver(([e]) => {
+      const size = `${Math.round(e.contentRect.width)}x${Math.round(e.contentRect.height)}`;
+      if (size === last) return;
+      const first = !last;
+      last = size;
+      if (first || !autoFitRef.current) return;
+      cancelAnimationFrame(raf);
+      raf = requestAnimationFrame(() => fitRef.current());
+    });
+    ro.observe(svg);
+    return () => {
+      ro.disconnect();
+      cancelAnimationFrame(raf);
+    };
   }, []);
   useEffect(() => {
     const h = () => fit();
@@ -372,7 +404,7 @@ export function Canvas() {
       const r = svgRef.current!.getBoundingClientRect();
       const cx = pinch.current.cx - r.left;
       const cy = pinch.current.cy - r.top;
-      setView({ k, x: cx - ((cx - pv.x) * k) / pv.k, y: cy - ((cy - pv.y) * k) / pv.k });
+      userView({ k, x: cx - ((cx - pv.x) * k) / pv.k, y: cy - ((cy - pv.y) * k) / pv.k });
       return;
     }
     const raw = toGrid(e.clientX, e.clientY);
@@ -409,7 +441,7 @@ export function Canvas() {
         d.moved = true;
         if (d.button === 2) rightPanned.current = true;
       }
-      setView({ ...d.orig, x: d.orig.x + e.clientX - d.sx, y: d.orig.y + e.clientY - d.sy });
+      userView({ ...d.orig, x: d.orig.x + e.clientX - d.sx, y: d.orig.y + e.clientY - d.sy });
     } else if (d?.kind === 'box') {
       d.cur = raw;
       setBox({ a: d.start, b: raw });
@@ -468,7 +500,7 @@ export function Canvas() {
     const cx = e.clientX - r.left;
     const cy = e.clientY - r.top;
     const k = Math.max(0.25, Math.min(3, view.k * Math.exp(-e.deltaY * 0.0015)));
-    setView({ k, x: cx - ((cx - view.x) * k) / view.k, y: cy - ((cy - view.y) * k) / view.k });
+    userView({ k, x: cx - ((cx - view.x) * k) / view.k, y: cy - ((cy - view.y) * k) / view.k });
   };
 
   const onDoubleClick = (e: React.MouseEvent) => {
@@ -485,7 +517,7 @@ export function Canvas() {
     const cx = r.width / 2;
     const cy = r.height / 2;
     const k = Math.max(0.25, Math.min(3, view.k * f));
-    setView({ k, x: cx - ((cx - view.x) * k) / view.k, y: cy - ((cy - view.y) * k) / view.k });
+    userView({ k, x: cx - ((cx - view.x) * k) / view.k, y: cy - ((cy - view.y) * k) / view.k });
   };
 
   const selectedComp = s.selection?.kind === 'comp' ? s.selection.id : null;
@@ -556,6 +588,23 @@ export function Canvas() {
         </defs>
         <rect width="100%" height="100%" fill="url(#grid)" />
         <g transform={`translate(${view.x} ${view.y}) scale(${view.k})`}>
+          {/* süperdüğüm çerçeveleri: şemanın altında, düğüm etiketleri üstünü örter */}
+          {methods?.node?.ok && s.solutionTab === 'node' &&
+            methods.node.supernodes.map((sn, i) => {
+              const set = new Set(sn);
+              const ptsIn: Pt[] = [];
+              for (const c of components) pinPositions(c).forEach((p, k) => set.has(methods.nl.pinNodes[c.id]?.[k]) && ptsIn.push(p));
+              for (const w of wires) if (set.has(methods.nl.wireNodes[w.id])) ptsIn.push(w.from, w.to);
+              if (!ptsIn.length) return null;
+              const xs = ptsIn.map((p) => p[0]);
+              const ys = ptsIn.map((p) => p[1]);
+              const x0 = Math.min(...xs) - 0.8, x1 = Math.max(...xs) + 0.8, y0 = Math.min(...ys) - 0.8, y1 = Math.max(...ys) + 0.8;
+              return (
+                <g key={i} pointerEvents="none">
+                  <rect x={x0 * G} y={y0 * G} width={(x1 - x0) * G} height={(y1 - y0) * G} rx={10} fill="rgba(15,118,110,0.06)" stroke="#0f766e" strokeWidth={1.6} strokeDasharray="7 5" />
+                </g>
+              );
+            })}
           <Schematic
             components={components}
             wires={wires}
@@ -619,7 +668,7 @@ export function Canvas() {
                 </text>
               </g>
             ))}
-          {/* süperdüğümler */}
+          {/* süperdüğüm adları */}
           {methods?.node?.ok && s.solutionTab === 'node' &&
             methods.node.supernodes.map((sn, i) => {
               const set = new Set(sn);
@@ -630,11 +679,18 @@ export function Canvas() {
               const xs = ptsIn.map((p) => p[0]);
               const ys = ptsIn.map((p) => p[1]);
               const x0 = Math.min(...xs) - 0.8, x1 = Math.max(...xs) + 0.8, y0 = Math.min(...ys) - 0.8, y1 = Math.max(...ys) + 0.8;
+              const tag = `süperdüğüm {${sn.join(', ')}}`;
+              const tw = tag.length * 6.6 + 4;
+              // ad, bileşen ve düğüm etiketlerinin üstüne binmeyecek bir köşeye yazılır
+              const res = s.results;
+              const nodeBoxes = res && s.showNodeLabels && !isStale(s)
+                ? placeNodeLabels(components, wires, methods.nl, (k) => `${k}: ${nodeText(res, k, s.tIndex)}`).map((l) => ({ x: l.x, y: l.y, w: l.w, h: 16 }))
+                : [];
+              const pos = placeFrameTag(components, { x: x0 * G, y: y0 * G, w: (x1 - x0) * G, h: (y1 - y0) * G }, tw, 14, nodeBoxes);
               return (
                 <g key={i} pointerEvents="none">
-                  <rect x={x0 * G} y={y0 * G} width={(x1 - x0) * G} height={(y1 - y0) * G} rx={10} fill="rgba(15,118,110,0.06)" stroke="#0f766e" strokeWidth={1.6} strokeDasharray="7 5" />
-                  <text x={x0 * G + 6} y={y0 * G - 6} fontSize={11} fontWeight={700} fill="#0f766e" fontFamily="DejaVuSans, sans-serif">
-                    süperdüğüm {`{${sn.join(', ')}}`}
+                  <text x={pos.x} y={pos.y + 11} fontSize={11} fontWeight={700} fill="#0f766e" fontFamily="DejaVuSans, sans-serif" stroke="#ffffff" strokeWidth={3} paintOrder="stroke">
+                    {tag}
                   </text>
                 </g>
               );

@@ -1,17 +1,33 @@
 # Devre Lab Simülatörü
 
+[![CI](https://github.com/Realfoxxy/Devre-Uygulamas-/actions/workflows/ci.yml/badge.svg)](https://github.com/Realfoxxy/Devre-Uygulamas-/actions/workflows/ci.yml)
+[![Lisans: MIT](https://img.shields.io/badge/lisans-MIT-blue.svg)](LICENSE)
+[![Canlı demo](https://img.shields.io/badge/canl%C4%B1%20demo-GitHub%20Pages-2563eb.svg)](https://realfoxxy.github.io/Devre-Uygulamas-/)
+
 **Uygulamayı aç: https://realfoxxy.github.io/Devre-Uygulamas-/**
 
 Öğrencinin devreyi ekranda çizdiği, her bileşenin gerilim ve akımını tıklayarak gördüğü ve sonucu
 PDF rapor olarak aldığı, tarayıcıda çalışan bir devre simülatörü. Kurulum gerektirmez; telefonda da açılır.
 Hiçbir veri sunucuya gitmez.
 
+> **English:** a free, open-source circuit simulator that runs entirely in the browser — no install, no account,
+> works on phones. Draw a circuit, click any part to read its voltage, current and power, and export a one-page PDF
+> lab report. DC / AC phasor / transient analysis, node & mesh equations, Thevenin–Norton and superposition,
+> op-amps, switches, first- and second-order circuits with the closed-form response next to the simulation.
+> The UI is in Turkish.
+
+| İkinci derece devre: grafik + formül | Thevenin / Norton kartı |
+|---|---|
+| ![Seri RLC devresi, v(t) ve i(t) grafikleri](docs/img/rlc-ikinci-derece.png) | ![Bağımlı kaynaklı Thevenin eşdeğeri](docs/img/thevenin.png) |
+| **Düğüm denklemleri (süperdüğüm)** | **Telefon görünümü · PDF rapor** |
+| ![Süperdüğümlü devre ve düğüm denklemleri](docs/img/dugum-cevre.png) | <img src="docs/img/telefon.png" alt="Telefonda op-amp devresi" width="38%"> <img src="docs/img/pdf-rapor.png" alt="Tek sayfalık PDF rapor" width="52%"> |
+
 ## Özellikler
 
 - **Bileşenler:** direnç (R), kapasitör (C), bobin (L), DC/AC gerilim kaynağı (V), DC/AC akım kaynağı (I),
   toprak (GND), ideal **voltmetre** (VM) ve **ampermetre** (AM);
   bağımlı kaynaklar: GKGK/VCVS (E), AKGK/CCVS (H), GKAK/VCCS (G), AKAK/CCCS (F) — kontrol bileşeni listeden ya da çizimden seçilir.
-- **Analizler:** DC, AC fazör (tek frekans + isteğe bağlı Bode taraması), geçici rejim (geri Euler / trapez).
+- **Analizler:** DC, AC fazör (tek frekans + isteğe bağlı Bode taraması), geçici rejim (trapez — varsayılan — ya da geri Euler).
 - **Ölçüm:** bileşene tıklayınca gerilim, akım, güç (AC'de genlik ∠ faz, etkin değer, empedans; geçici rejimde
   seçilen andaki değer ve τ). Devre üzerinde düğüm gerilimi etiketleri ve seçili bileşenin akım yönü oku.
   İki nokta arası gerilim için voltmetre, dal akımı için seri ampermetre eklenebilir.
@@ -30,7 +46,7 @@ Hiçbir veri sunucuya gitmez.
   çözümü) ya da elle, 0⁻ / 0⁺ tablosu (sürekli / sıçrayan büyüklükler), depolanan enerji, her anahtarlama aralığı için
   x(t) = x(∞) + [x(t₀⁺) − x(∞)]e^(−(t−t₀)/τ) formülü (sinüs / üstel girişte doğal + zorlanmış), kararsızlık uyarısı,
   op-amp integral / türev alıcı tanıma.
-- **İkinci derece devreler (Bölüm 9):** derece (bağımsız C + L; paralel C / seri L tek sayılır, C–V döngüsü ve L–I kesitlemesi
+- **İkinci derece devreler (Bölüm 9):** derece (bağımsız C + L; paralel / seri C ve seri / paralel L tek durum değişkeni sayılır, C–V döngüsü ve L–I kesitlemesi
   tespiti), durum denklemleri, karakteristik denklem, α / ω₀, sönüm türü, seri / paralel RLC formülleri, s-düzlemi grafiği
   (direnç kaydırıcısıyla canlı kökler), zorlanmış yanıt (sabit, üstel, sinüs; çakışan giriş) ve tam yanıt formülü; formül
   eğrisi simülasyonla aynı grafikte.
@@ -55,10 +71,12 @@ Hiçbir veri sunucuya gitmez.
 
 ## Geliştirme
 
+Node.js 22 gerekir.
+
 ```bash
 npm install
 npm run dev        # geliştirme sunucusu
-npm test           # Vitest: çözücü, netlist, birimler, dosya biçimi
+npm test           # Vitest: çözücü, yöntemler, teoremler, birinci / ikinci derece, dosya biçimi
 npm run build      # dist/ klasörüne statik site
 ```
 
@@ -69,9 +87,11 @@ olduğu için alt dizinde de çalışır).
 
 ```
 src/
-├── core/        circuit.ts (veri modeli) · netlist.ts (union-find) · units.ts · complex.ts · results.ts · examples.ts
-├── solver/      lu.ts (kısmi pivotlu LU) · mna.ts (damgalar) · dc.ts · ac.ts · transient.ts · validate.ts
-│                analyze.ts · worker.ts (Web Worker) · runner.ts · textNetlist.ts
+├── core/        circuit.ts (veri modeli) · netlist.ts (union-find) · units.ts · complex.ts · results.ts
+│                examples.ts · exampleBook.ts (Örnekler menüsü) · energy.ts
+├── solver/      lu.ts (kısmi pivotlu LU) · mna.ts · stamp.ts (eleman damgaları) · dc.ts · ac.ts · transient.ts
+│                waveform.ts · validate.ts · analyze.ts · worker.ts (Web Worker) · runner.ts · textNetlist.ts
+│   └── methods/ nodal · mesh · seriesParallel · kirchhoff · theorems · firstOrder · secondOrder · export
 ├── state/       store.ts (Zustand, geri al / yinele)
 ├── storage/     project.ts (.devre, otomatik taslak)
 ├── report/      pdf.ts (jsPDF + svg2pdf + autotable) · schematicSvg.tsx
