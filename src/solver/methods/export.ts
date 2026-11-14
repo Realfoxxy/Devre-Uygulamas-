@@ -109,6 +109,9 @@ export function toSpice(nl: Netlist, title = 'Devre Lab Simülatörü'): string 
       case 'VM':
         lines.push(`* ${e.id}: voltmetre, düğüm ${a} – ${b}`);
         break;
+      case 'SW':
+        lines.push(`R${e.id} ${a} ${b} ${(p.sw0 ?? 'open') === 'closed' ? '1m' : '1T'} ; anahtar (t < 0 konumu)`);
+        break;
       case 'E':
       case 'G':
         if (ref) lines.push(`${e.id} ${a} ${b} ${ref.nodes[0]} ${ref.nodes[1]} ${n(Number(p.gain))}`);

@@ -1,6 +1,7 @@
 // R, L, C, V, I, GND, voltmetre ve ampermetre çizimleri (yerel koordinatlar, G = 20 px).
 import { Component, CompType, Params, Pt, rotatePt } from '../../core/circuit';
 import { describeValue } from '../../core/netlist';
+import { formatEng } from '../../core/units';
 
 export const G = 20;
 
@@ -147,6 +148,22 @@ function Body({ type, params, t }: { type: CompType; params: Params; t: Theme })
           <Lead from={16} to={40} stroke={s} />
         </g>
       );
+    case 'SW': {
+      // t < 0 konumu çizilir; ok, t₁ anındaki hareket yönünü gösterir
+      const closed = (params.sw0 ?? 'open') === 'closed';
+      return (
+        <g>
+          <line x1={-40} y1={0} x2={-14} y2={0} stroke={s} strokeWidth={2} />
+          <circle cx={-14} cy={0} r={3} fill={t.fill} stroke={s} strokeWidth={1.6} />
+          <line x1={-14} y1={0} x2={closed ? 12 : 10} y2={closed ? 0 : -16} stroke={s} strokeWidth={2.2} strokeLinecap="round" />
+          <circle cx={14} cy={0} r={3} fill={t.fill} stroke={s} strokeWidth={1.6} />
+          <line x1={17} y1={0} x2={40} y2={0} stroke={s} strokeWidth={2} />
+          {(params.times ?? []).length > 0 && (
+            <path d={closed ? 'M 6 -4 A 18 18 0 0 0 -2 -16' : 'M 2 -20 A 18 18 0 0 1 10 -6'} fill="none" stroke={s} strokeWidth={1.3} />
+          )}
+        </g>
+      );
+    }
     case 'SW2': {
       // ortak uç solda; kol A (üst) ya da B (alt) kontağına
       const toB = (params.way ?? 'A') === 'B';
@@ -173,6 +190,8 @@ function Body({ type, params, t }: { type: CompType; params: Params; t: Theme })
       );
   }
 }
+
+const fmtT = (t: number) => (t === 0 ? '0' : formatEng(t, 's').replace(' ', ''));
 
 /** Döndürmeden bağımsız dik duran yazılar (+, −, V, A). Konumlar yerel koordinatlarda. */
 function uprightMarks(type: CompType, params: Params): { at: Pt; text: string; size: number; bold?: boolean }[] {
@@ -202,6 +221,8 @@ function uprightMarks(type: CompType, params: Params): { at: Pt; text: string; s
         { at: [32, -29], text: 'A', size: 10, bold: true },
         { at: [32, 29], text: 'B', size: 10, bold: true },
       ];
+    case 'SW':
+      return (params.times ?? []).length ? [{ at: [0, 14], text: `t = ${fmtT(params.times![0])}`, size: 9 }] : [];
     case 'VM':
       return [
         { at: [0, 0], text: 'V', size: 15, bold: true },

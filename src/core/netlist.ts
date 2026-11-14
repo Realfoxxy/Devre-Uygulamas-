@@ -234,7 +234,9 @@ export function describeValue(type: CompType, p: Params): string {
     case 'TS':
       return `${formatEng(p.kT ?? 1e-6, 'A/K')}, ${+(p.tempC ?? 25).toFixed(1)} °C`;
     case 'SW2':
-      return `→ ${p.way ?? 'A'}`;
+      return `${p.way ?? 'A'}${(p.times ?? []).length ? ` ⇄ ${(p.times ?? []).map((t) => formatEng(t, 's').replace(' ', '')).join(', ')}` : ''}`;
+    case 'SW':
+      return `${(p.sw0 ?? 'open') === 'closed' ? 'kapalı' : 'açık'}${(p.times ?? []).length ? ` ⇄ ${(p.times ?? []).map((t) => formatEng(t, 's').replace(' ', '')).join(', ')}` : ''}`;
     case 'VM':
       return p.real ? `gerçek, ${formatEng(p.rMeter ?? 10e6, 'Ω')}` : 'voltmetre';
     case 'AM':

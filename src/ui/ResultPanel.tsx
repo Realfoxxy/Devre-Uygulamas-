@@ -11,6 +11,7 @@ import { DependentFields } from './DependentFields';
 import { ExtraFields } from './ExtraFields';
 import { SourceFields } from './SourceFields';
 import { TheoremPanel } from './TheoremCard';
+import { FirstOrderCard, InitialTable } from './FirstOrderCard';
 import { KclPanel, KvlPanel, SeriesParallelPanel } from './KirchhoffPanels';
 import { ValueInput } from './ValueInput';
 import { compDisplay, nodeText } from './values';
@@ -58,6 +59,7 @@ function ParamEditor({ comp }: { comp: Component }) {
   }, [comp.id]);
   const p = comp.params;
   const def = PARTS[comp.type];
+  const hasSwitch = useStore((s) => s.doc.components.some((c) => c.type === 'SW' || c.type === 'SW2'));
   const set = (k: keyof typeof p) => (v: number | undefined) => update(comp.id, { [k]: v ?? 0 });
 
   const rows: JSX.Element[] = [];
@@ -69,20 +71,43 @@ function ParamEditor({ comp }: { comp: Component }) {
         <ValueInput value={p.value} unit={def.unit} onCommit={set('value')} autoFocusEvent positive />
       </label>,
     );
-    if (comp.type === 'C')
+    if (comp.type === 'C' || comp.type === 'L') {
+      const auto = (p.init ?? (hasSwitch ? 'auto' : 'manual')) === 'auto';
       rows.push(
-        <label key="v0">
-          <span>Başlangıç gerilimi</span>
-          <ValueInput value={p.v0 ?? 0} unit="V" onCommit={set('v0')} />
+        <label key="init">
+          <span>Başlangıç koşulu</span>
+          <span className="seg">
+            <button className={auto ? 'on' : ''} onClick={() => update(comp.id, { init: 'auto' })}>
+              Otomatik
+            </button>
+            <button className={!auto ? 'on' : ''} onClick={() => update(comp.id, { init: 'manual' })}>
+              Elle
+            </button>
+          </span>
         </label>,
       );
-    if (comp.type === 'L')
+      if (!auto)
+        rows.push(
+          comp.type === 'C' ? (
+            <label key="v0">
+              <span>v(0⁻)</span>
+              <ValueInput value={p.v0 ?? 0} unit="V" onCommit={set('v0')} />
+            </label>
+          ) : (
+            <label key="i0">
+              <span>i(0⁻)</span>
+              <ValueInput value={p.i0 ?? 0} unit="A" onCommit={set('i0')} />
+            </label>
+          ),
+        );
       rows.push(
-        <label key="i0">
-          <span>Başlangıç akımı</span>
-          <ValueInput value={p.i0 ?? 0} unit="A" onCommit={set('i0')} />
-        </label>,
+        <p key="initnote" className="muted small">
+          {auto
+            ? `Otomatik: anahtarların t < 0 konumuyla DC çözümden (C açık, L kısa) ${comp.type === 'C' ? 'v_C(0⁻)' : 'i_L(0⁻)'} bulunur; süreklilikle 0⁺ değeri olur (Bölüm 7.8).`
+            : 'Elle: önceden dolu kapasitör / akım taşıyan bobin soruları için başlangıç değerini girin.'}
+        </p>,
       );
+    }
   }
   return (
     <div className="editor">
@@ -195,6 +220,7 @@ function CompResults({ comp }: { comp: Component }) {
       </table>
       <p className="muted small">Pasif işaret kuralı: akım + uçtan girerse pozitif. Ok, gerçek akım yönünü gösterir.</p>
       <KvlPanel key={comp.id} compId={comp.id} />
+      {res.kind === 'transient' && res.firstOrder?.elem === comp.id && <FirstOrderCard />}
       <Measured comp={comp} res={res} />
     </div>
   );
@@ -225,6 +251,8 @@ function Summary() {
   const nl = s.resultsNetlist;
   return (
     <div className={`summary ${isStale(s) ? 'stale' : ''}`}>
+      <FirstOrderCard />
+      <InitialTable />
       <div className="panel-title">Düğüm gerilimleri</div>
       <table className="kv">
         <tbody>

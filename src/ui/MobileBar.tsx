@@ -49,7 +49,7 @@ export function MobileBar({ onDetails }: { onDetails: () => void }) {
           <SourceFields comp={comp} compact />
         </div>
       )}
-      {['OA', 'POT', 'TS', 'SW2', 'VM', 'AM'].includes(comp.type) && (
+      {['OA', 'POT', 'TS', 'SW', 'SW2', 'VM', 'AM'].includes(comp.type) && (
         <div className="mb-dep fields">
           <ExtraFields comp={comp} compact />
         </div>

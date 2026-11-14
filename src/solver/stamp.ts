@@ -34,6 +34,12 @@ export interface StampCtx {
   internal: Map<string, number>;
   /** İç düğümler dahil toplam düğüm sayısı */
   nodeTotal: number;
+  /** Anahtar konumlarının değerlendirileceği an (verilmezse: DC → t < 0, tran0 → 0⁺, tran → t'den hemen önce) */
+  swTime?: number;
+  /** Karmaşık frekans s (verilirse AC damgasında jω yerine kullanılır; zorlanmış yanıt için) */
+  s?: Complex;
+  /** Kaynak değerini zorla (zorlanmış yanıt için birim giriş) */
+  sourceOverride?: Map<string, Complex>;
 }
 
 export const R_ON = 1e-3;
@@ -77,9 +83,29 @@ export const potParts = (e: NetElement) => {
   const a = Math.min(1, Math.max(0, Number(e.params.pos ?? 0.5)));
   return { top: Math.max(MIN_R, (1 - a) * Rp), bottom: Math.max(MIN_R, a * Rp) };
 };
+/** Bu bağlamda anahtarın kaç kez konum değiştirmiş olduğu */
+export function switchToggles(e: NetElement, ctx: Pick<StampCtx, 'mode' | 't' | 'swTime'>): number {
+  const times = e.params.times ?? [];
+  if (ctx.swTime !== undefined) return times.filter((x) => x <= ctx.swTime!).length;
+  if (ctx.mode === 'dc' || ctx.mode === 'ac') return times.filter((x) => x < 0).length;
+  if (ctx.mode === 'tran0') return times.filter((x) => x <= 0).length;
+  // adım (t−h, t] aralığında anahtar, t'den önceki anlardaki değişimlere göre konumdadır
+  return times.filter((x) => x < ctx.t - 1e-15).length;
+}
+
+/** Tek yollu anahtar kapalı mı? */
+export function switchClosed(e: NetElement, ctx: Pick<StampCtx, 'mode' | 't' | 'swTime'>): boolean {
+  const closed0 = (e.params.sw0 ?? 'open') === 'closed';
+  return switchToggles(e, ctx) % 2 === 0 ? closed0 : !closed0;
+}
+
 /** İki yollu anahtarın ortak–A ve ortak–B dirençleri (t anında) */
-export function sw2Parts(e: NetElement, _ctx: StampCtx) {
-  const onA = (e.params.way ?? 'A') === 'A';
+export function sw2Way(e: NetElement, ctx: Pick<StampCtx, 'mode' | 't' | 'swTime'>): 'A' | 'B' {
+  const w0 = e.params.way ?? 'A';
+  return switchToggles(e, ctx) % 2 === 0 ? w0 : w0 === 'A' ? 'B' : 'A';
+}
+export function sw2Parts(e: NetElement, ctx: StampCtx) {
+  const onA = sw2Way(e, ctx) === 'A';
   return { rA: onA ? R_ON : R_OFF, rB: onA ? R_OFF : R_ON };
 }
 
@@ -94,6 +120,8 @@ const active = (e: NetElement, ctx: StampCtx) => !ctx.exclude?.has(e.id);
 
 /** Bağımsız kaynağın bu bağlamdaki değeri (DC: t < 0 değeri, AC: fazör, geçici: anlık) */
 export function sourceValue(e: NetElement, ctx: StampCtx): Complex {
+  const o = ctx.sourceOverride?.get(e.id);
+  if (o) return o;
   if (ctx.zero && ctx.keep !== e.id) return ZERO;
   const p = e.params;
   switch (ctx.mode) {
@@ -199,7 +227,7 @@ export function stampElement(sys: MNASystem, e: NetElement, ctx: StampCtx) {
         return;
       }
       if (ctx.mode === 'ac') {
-        const y = cx(0, ctx.w * val);
+        const y = ctx.s ? cx(ctx.s.re * val, ctx.s.im * val) : cx(0, ctx.w * val);
         if (sys.hasBranch(id)) sys.stampBranch(a, b, id, ZERO, div(cx(1), y), id);
         else sys.stampAdmittance(a, b, y, id);
         return;
@@ -224,7 +252,7 @@ export function stampElement(sys: MNASystem, e: NetElement, ctx: StampCtx) {
         return;
       }
       if (ctx.mode === 'ac') {
-        const z = cx(0, ctx.w * val);
+        const z = ctx.s ? cx(ctx.s.re * val, ctx.s.im * val) : cx(0, ctx.w * val);
         if (sys.hasBranch(id)) sys.stampBranch(a, b, id, ZERO, z, id);
         else sys.stampAdmittance(a, b, div(cx(1), z), id);
         return;
@@ -267,6 +295,9 @@ export function stampElement(sys: MNASystem, e: NetElement, ctx: StampCtx) {
       sys.stampAdmittance(c, pb, cx(1 / rB), id);
       return;
     }
+    case 'SW':
+      sys.stampAdmittance(a, b, cx(1 / (switchClosed(e, ctx) ? R_ON : R_OFF)), id);
+      return;
     case 'OA': {
       const [p, n, o] = e.nodes;
       const model = e.params.model ?? 'ideal';
@@ -360,7 +391,7 @@ export function measureElement(e: NetElement, ctx: StampCtx, sol: Solution): Mea
     case 'C':
       if (ctx.mode === 'dc') return { V, I: ZERO };
       if (sol.has(e.id)) return { V, I: sol.j(e.id) };
-      if (ctx.mode === 'ac') return { V, I: mul(V, cx(0, ctx.w * val)) };
+      if (ctx.mode === 'ac') return { V, I: mul(V, ctx.s ? cx(ctx.s.re * val, ctx.s.im * val) : cx(0, ctx.w * val)) };
       {
         const { G, Ieq } = companion(e, ctx);
         return { V, I: cx(G * V.re - Ieq) };
@@ -368,7 +399,7 @@ export function measureElement(e: NetElement, ctx: StampCtx, sol: Solution): Mea
     case 'L':
       if (sol.has(e.id)) return { V: ctx.mode === 'dc' ? ZERO : V, I: sol.j(e.id) };
       if (ctx.mode === 'tran0') return { V, I: cx(Number(e.params.i0 ?? 0)) };
-      if (ctx.mode === 'ac') return { V, I: div(V, cx(0, ctx.w * val)) };
+      if (ctx.mode === 'ac') return { V, I: div(V, ctx.s ? cx(ctx.s.re * val, ctx.s.im * val) : cx(0, ctx.w * val)) };
       {
         const { G, Ieq } = companion(e, ctx);
         return { V, I: cx(G * V.re + Ieq) };
@@ -383,6 +414,10 @@ export function measureElement(e: NetElement, ctx: StampCtx, sol: Solution): Mea
       return { V, I: e.params.real ? cx(V.re / Number(e.params.rMeter ?? 10e6), V.im / Number(e.params.rMeter ?? 10e6)) : ZERO };
     case 'TS':
       return { V, I: ctx.zero && ctx.keep !== e.id ? ZERO : cx(tsCurrent(e)) };
+    case 'SW': {
+      const r = switchClosed(e, ctx) ? R_ON : R_OFF;
+      return { V, I: cx(V.re / r, V.im / r) };
+    }
     case 'POT': {
       const vw = sol.v(e.nodes[2]);
       const { top } = potParts(e);
@@ -393,7 +428,7 @@ export function measureElement(e: NetElement, ctx: StampCtx, sol: Solution): Mea
       const { rA, rB } = sw2Parts(e, ctx);
       const iA = cx((c.re - pa.re) / rA, (c.im - pa.im) / rA);
       const iB = cx((c.re - pb.re) / rB, (c.im - pb.im) / rB);
-      const onA = (e.params.way ?? 'A') === 'A';
+      const onA = sw2Way(e, ctx) === 'A';
       return { V: onA ? cx(c.re - pa.re, c.im - pa.im) : cx(c.re - pb.re, c.im - pb.im), I: onA ? iA : iB, pinV: [c, pa, pb], pinI: [cx(iA.re + iB.re, iA.im + iB.im), cx(-iA.re, -iA.im), cx(-iB.re, -iB.im)] };
     }
     case 'OA': {

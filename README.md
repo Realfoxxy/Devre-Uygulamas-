@@ -26,6 +26,10 @@ Hiçbir veri sunucuya gitmez.
   ampermetre (yükleme hatası), iki yollu anahtar.
 - **Kaynak dalga biçimleri (Bölüm 1, 8, 9):** DC, AC, basamak, darbe / kare dalga, üstel, rampa, anahtarlanan sinüs, parçalı
   doğrusal (önizleme grafiğiyle); kırılma noktalarına hizalı zaman adımı, kenardan sonra geri Euler; iki imleç arasında enerji w = ∫p dt.
+- **Anahtarlar ve birinci derece devreler (Bölüm 7–8):** zamanlı tek / iki yollu anahtar, otomatik başlangıç koşulu (t < 0 DC
+  çözümü) ya da elle, 0⁻ / 0⁺ tablosu (sürekli / sıçrayan büyüklükler), depolanan enerji, her anahtarlama aralığı için
+  x(t) = x(∞) + [x(t₀⁺) − x(∞)]e^(−(t−t₀)/τ) formülü (sinüs / üstel girişte doğal + zorlanmış), kararsızlık uyarısı,
+  op-amp integral / türev alıcı tanıma.
 - **Lab:** ölçülen V / I değerini girince yüzde hata; **Çözümü göster** modunda netlist ve MNA matrisi
   (seçili bileşenin damgası renkli).
 - **Rapor:** başlık bloğu, vektör devre şeması, analiz ayarları, sonuç tablosu (ölçülen + % hata),
