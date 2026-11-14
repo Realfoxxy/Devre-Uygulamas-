@@ -116,6 +116,52 @@ function Body({ type, params, t }: { type: CompType; params: Params; t: Theme })
           <Lead from={17} to={40} stroke={s} />
         </g>
       );
+    case 'OA':
+      // kitaptaki gibi üçgen; + ve − girişler solda, çıkış sağda
+      return (
+        <g>
+          <line x1={-40} y1={20} x2={-22} y2={20} stroke={s} strokeWidth={2} />
+          <line x1={-40} y1={-20} x2={-22} y2={-20} stroke={s} strokeWidth={2} />
+          <polygon points="-22,-32 -22,32 26,0" fill={t.fill} stroke={s} strokeWidth={sw} strokeLinejoin="round" />
+          <line x1={26} y1={0} x2={40} y2={0} stroke={s} strokeWidth={2} />
+        </g>
+      );
+    case 'POT':
+      return (
+        <g>
+          <Lead from={-40} to={-24} stroke={s} />
+          <polyline points="-24,0 -20,-8 -12,8 -4,-8 4,8 12,-8 20,8 24,0" fill="none" stroke={s} strokeWidth={sw} strokeLinejoin="round" />
+          <Lead from={24} to={40} stroke={s} />
+          {/* orta uç: yukarıdan gövdeye inen ok */}
+          <line x1={0} y1={-40} x2={0} y2={-14} stroke={s} strokeWidth={2} />
+          <polygon points="0,-9 -5,-17 5,-17" fill={s} />
+        </g>
+      );
+    case 'TS':
+      return (
+        <g>
+          <Lead from={-40} to={-16} stroke={s} />
+          <circle r={16} fill={t.fill} stroke={s} strokeWidth={sw} />
+          <line x1={-9} y1={0} x2={5} y2={0} stroke={s} strokeWidth={2} />
+          <polygon points="10,0 3,-5 3,5" fill={s} />
+          <Lead from={16} to={40} stroke={s} />
+        </g>
+      );
+    case 'SW2': {
+      // ortak uç solda; kol A (üst) ya da B (alt) kontağına
+      const toB = (params.way ?? 'A') === 'B';
+      return (
+        <g>
+          <line x1={-40} y1={0} x2={-14} y2={0} stroke={s} strokeWidth={2} />
+          <circle cx={-14} cy={0} r={3} fill={t.fill} stroke={s} strokeWidth={1.6} />
+          <line x1={-14} y1={0} x2={18} y2={toB ? 18 : -18} stroke={s} strokeWidth={2.2} strokeLinecap="round" />
+          <circle cx={20} cy={-20} r={3} fill={t.fill} stroke={s} strokeWidth={1.6} />
+          <circle cx={20} cy={20} r={3} fill={t.fill} stroke={s} strokeWidth={1.6} />
+          <line x1={23} y1={-20} x2={40} y2={-20} stroke={s} strokeWidth={2} />
+          <line x1={23} y1={20} x2={40} y2={20} stroke={s} strokeWidth={2} />
+        </g>
+      );
+    }
     case 'GND':
       return (
         <g>
@@ -144,6 +190,18 @@ function uprightMarks(type: CompType, params: Params): { at: Pt; text: string; s
         { at: [-7, 0], text: '+', size: 13, bold: true },
         { at: [7, 0], text: '−', size: 13, bold: true },
       ];
+    case 'OA':
+      return [
+        { at: [-15, 20], text: '+', size: 13, bold: true },
+        { at: [-15, -20], text: '−', size: 13, bold: true },
+      ];
+    case 'TS':
+      return [{ at: [0, 10], text: 'T', size: 9, bold: true }];
+    case 'SW2':
+      return [
+        { at: [32, -29], text: 'A', size: 10, bold: true },
+        { at: [32, 29], text: 'B', size: 10, bold: true },
+      ];
     case 'VM':
       return [
         { at: [0, 0], text: 'V', size: 15, bold: true },
@@ -157,6 +215,7 @@ function uprightMarks(type: CompType, params: Params): { at: Pt; text: string; s
     case 'R':
     case 'C':
     case 'L':
+    case 'POT':
       return [{ at: [-33, -9], text: '+', size: 11 }];
     default:
       return [];
@@ -217,7 +276,7 @@ export function PartLabel({
 }) {
   if (comp.type === 'GND') return null;
   const vertical = comp.rot % 180 !== 0;
-  const value = comp.type === 'VM' || comp.type === 'AM' ? '' : describeValue(comp.type, comp.params);
+  const value = (comp.type === 'VM' || comp.type === 'AM') && !comp.params.real ? '' : describeValue(comp.type, comp.params);
   const cx = comp.x * G;
   const cy = comp.y * G;
   const lines = [
@@ -255,9 +314,10 @@ export function PartLabel({
 export function PartIcon({ type, size = 44 }: { type: CompType; size?: number }) {
   const t: Theme = { ...PRINT_THEME, fill: 'transparent', font: 'inherit' };
   const comp = { type, x: 0, y: 0, rot: 0, params: type === 'V' || type === 'I' ? { mode: 'DC' as const } : {} };
-  const vb = type === 'GND' ? '-24 -6 48 32' : '-44 -22 88 44';
+  const tall = type === 'OA' || type === 'POT' || type === 'SW2';
+  const vb = type === 'GND' ? '-24 -6 48 32' : type === 'POT' ? '-44 -42 88 54' : tall ? '-44 -34 88 68' : '-44 -22 88 44';
   return (
-    <svg width={size} height={type === 'GND' ? size * 0.66 : size / 2} viewBox={vb} aria-hidden>
+    <svg width={size} height={type === 'GND' ? size * 0.66 : tall ? size * 0.66 : size / 2} viewBox={vb} aria-hidden>
       <PartSymbol comp={comp} theme={t} />
     </svg>
   );

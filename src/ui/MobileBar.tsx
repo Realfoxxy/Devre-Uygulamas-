@@ -1,6 +1,7 @@
 // Telefon / tablet: bileşen seçilince altta açılan hızlı düzenleme çubuğu.
 import { PARTS, isDependent } from '../core/circuit';
 import { DependentFields } from './DependentFields';
+import { ExtraFields } from './ExtraFields';
 import { describeValue } from '../core/netlist';
 import { useStore } from '../state/store';
 import { ValueInput } from './ValueInput';
@@ -49,6 +50,11 @@ export function MobileBar({ onDetails }: { onDetails: () => void }) {
         <span className="muted small mb-desc">{comp.type === 'GND' ? '' : describeValue(comp.type, p)}</span>
         <button className="icon-btn" aria-label="Seçimi kaldır" onClick={() => select(null)}>✕</button>
       </div>
+      {['OA', 'POT', 'TS', 'SW2', 'VM', 'AM'].includes(comp.type) && (
+        <div className="mb-dep fields">
+          <ExtraFields comp={comp} compact />
+        </div>
+      )}
       {isDependent(comp.type) && (
         <div className="mb-dep fields">
           <DependentFields comp={comp} compact />

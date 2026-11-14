@@ -33,7 +33,38 @@ const VOLT = new Set(['V', 'AM', 'L', 'E', 'H']);
 
 const vName = (n: number) => `v${n}`;
 
-export function nodeEquations(nl: Netlist): MethodResult & { supernodes: number[][] } {
+/**
+ * Düğüm yöntemi için devreyi sadeleştirir: potansiyometre → iki direnç, sıcaklık sensörü → akım kaynağı,
+ * iki yollu anahtar → kapalı yol kısa devre (açık yol yok), gerçek ölçü aleti → direnç.
+ */
+function expandForNodal(nl: Netlist): Netlist | string {
+  const out: NetElement[] = [];
+  for (const e of nl.elements) {
+    const p = e.params;
+    if (e.type === 'POT') {
+      const Rp = Number(p.value);
+      const a = Math.min(1, Math.max(0, Number(p.pos ?? 0.5)));
+      out.push({ id: `${e.id}üst`, type: 'R', nodes: [e.nodes[0], e.nodes[2]], params: { value: Math.max(1e-3, (1 - a) * Rp) } });
+      out.push({ id: `${e.id}alt`, type: 'R', nodes: [e.nodes[2], e.nodes[1]], params: { value: Math.max(1e-3, a * Rp) } });
+    } else if (e.type === 'TS') {
+      out.push({ ...e, type: 'I', params: { mode: 'DC', value: Number(p.kT ?? 1e-6) * (Number(p.tempC ?? 25) + 273.15) } });
+    } else if (e.type === 'SW2') {
+      const to = (p.way ?? 'A') === 'A' ? e.nodes[1] : e.nodes[2];
+      out.push({ id: e.id, type: 'AM', nodes: [e.nodes[0], to], params: {} });
+    } else if ((e.type === 'VM' || e.type === 'AM') && p.real) {
+      out.push({ id: e.id, type: 'R', nodes: e.nodes, params: { value: Number(p.rMeter ?? (e.type === 'VM' ? 10e6 : 1)) } });
+    } else if (e.type === 'OA' && (p.model ?? 'ideal') !== 'ideal') {
+      return 'Düğüm denklemleri ideal op-amp modeliyle yazılır; op-amp modelini "İdeal" yapın ya da MNA sekmesine bakın.';
+    } else out.push(e);
+  }
+  return { ...nl, elements: out };
+}
+
+export function nodeEquations(nl0: Netlist): MethodResult & { supernodes: number[][] } {
+  const ex = expandForNodal(nl0);
+  if (typeof ex === 'string')
+    return { ok: false, message: ex, unknowns: [], given: [], defs: [], equations: [], A: [], b: [], solution: null, values: {}, supernodes: [] };
+  const nl = ex;
   const fail = (message: string) => ({
     ok: false,
     message,
@@ -47,7 +78,10 @@ export function nodeEquations(nl: Netlist): MethodResult & { supernodes: number[
     values: {},
     supernodes: [],
   });
-  const els = nl.elements.filter((e) => e.type !== 'C' && e.type !== 'VM');
+  const els = nl.elements.filter((e) => e.type !== 'C' && e.type !== 'VM' && e.type !== 'OA');
+  const opamps = nl.elements.filter((e) => e.type === 'OA');
+  // ideal op-amp çıkışlarında KAY yazılmaz (çıkış akımı bilinmiyor); yerine v₊ = v₋ kısıtı
+  const opOut = new Map(opamps.map((o) => [o.nodes[2], o]));
   const byId = new Map(nl.elements.map((e) => [e.id, e]));
   const n = nl.nodeCount;
 
@@ -268,7 +302,18 @@ export function nodeEquations(nl: Netlist): MethodResult & { supernodes: number[
       continue;
     }
     if (g.length === 1) {
+      const op = opOut.get(g[0]);
+      if (op) {
+        const d = diff(op.nodes[0], op.nodes[1]);
+        rows.push(d.lin);
+        equations.push({ title: `${op.id} (sanal kısa devre, v₊ = v₋)`, text: `${d.text} = 0`, simplified: linEquation(d.lin, unknowns) });
+        continue;
+      }
       kcl(g, `Düğüm ${g[0]} (KAY)`);
+      continue;
+    }
+    if (g.some((n) => opOut.has(n))) {
+      unsupported = 'Op-amp çıkışı bir gerilim kaynağı zincirine bağlı; bu durumda düğüm denklemleri için MNA sekmesine bakın.';
       continue;
     }
     const sorted = [...g].sort((x, y) => x - y);

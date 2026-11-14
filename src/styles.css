@@ -131,6 +131,11 @@ kbd {
 .pi-abbr { position: absolute; top: 3px; right: 6px; font-size: 10px; color: var(--muted); font-weight: 600; }
 .palette-item.wide .pi-abbr { position: static; }
 .palette-help { margin-top: 16px; }
+.fields .seg { flex-wrap: wrap; }
+.fields .seg button { flex: 1 1 auto; }
+.pot-slider { grid-template-columns: 1fr !important; }
+.pot-slider input { width: 100%; height: 28px; }
+.range2 { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
 .palette-group + .palette-group { margin-top: 10px; }
 .palette-group-title { font-size: 11px; color: var(--muted); margin: 0 0 5px 2px; }
 .ctrl-pick { display: flex; gap: 6px; min-width: 0; }

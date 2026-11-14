@@ -4,7 +4,7 @@ import { Complex, ZERO, abs, cx, div, sub } from '../../core/complex';
 import type { Netlist, NetElement } from '../../core/netlist';
 import { SingularMatrixError } from '../lu';
 import { MNASystem } from '../mna';
-import { StampCtx, branchIds, makeCtx, measureElement, solutionFrom, stampAll } from '../stamp';
+import { StampCtx, makeCtx, measureElement, newSystem, solutionFrom, stampAll } from '../stamp';
 
 export type TheoremMode = { kind: 'dc' } | { kind: 'ac'; freq: number };
 
@@ -23,7 +23,7 @@ interface Solved {
 
 /** Devreyi isteğe bağlı ek damgalarla çözer; tekilse null. */
 function solve(nl: Netlist, ctx: StampCtx, extraBranches: string[] = [], extra?: (sys: MNASystem) => void, gmin = 0): Solved | null {
-  const sys = new MNASystem(nl.nodeCount, [...branchIds(nl, ctx), ...extraBranches], false);
+  const sys = newSystem(nl, ctx, false, extraBranches);
   if (gmin) for (let k = 1; k <= nl.nodeCount; k++) sys.stampAdmittance(k, 0, cx(gmin));
   stampAll(sys, nl, ctx);
   extra?.(sys);

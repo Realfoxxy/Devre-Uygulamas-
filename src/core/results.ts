@@ -19,12 +19,17 @@ export interface DCComp {
   V: number;
   I: number;
   P: number;
+  /** Üç uçlu elemanlar: pin gerilimleri ve her pinden giren akım */
+  pinV?: number[];
+  pinI?: number[];
 }
 
 export interface DCResult {
   kind: 'dc';
   nodeV: number[];
   comps: Record<string, DCComp>;
+  /** Gerçek ölçü aletleri varsa: ideal aletlerle ölçülecek değer (yükleme hatası için) */
+  idealMeters?: Record<string, number>;
   system: SystemDump;
 }
 
@@ -35,6 +40,8 @@ export interface ACComp {
   Z?: Complex;
   /** Ortalama güç Re(V·I*)/2 */
   P: number;
+  pinV?: Complex[];
+  pinI?: Complex[];
 }
 
 export interface ACSweep {
@@ -59,7 +66,7 @@ export interface TranResult {
   t: Float64Array;
   /** nodeV[düğüm][adım] */
   nodeV: Float64Array[];
-  comps: Record<string, { V: Float64Array; I: Float64Array }>;
+  comps: Record<string, { V: Float64Array; I: Float64Array; pinV?: Float64Array[]; pinI?: Float64Array[] }>;
   /** Kapasitör ve bobinler için zaman sabiti */
   tau: Record<string, number>;
   h: number;

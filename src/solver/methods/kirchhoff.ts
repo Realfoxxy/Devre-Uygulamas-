@@ -8,9 +8,24 @@ export interface KclRow {
 }
 
 /** Düğüme bağlı her dalın akımı; I(e) bileşenin + ucundan giren akımdır. */
-export function kclAt(nl: Netlist, node: number, I: (id: string) => number): { rows: KclRow[]; sum: number } {
+export function kclAt(
+  nl: Netlist,
+  node: number,
+  I: (id: string) => number,
+  pinI?: (id: string) => number[] | undefined,
+): { rows: KclRow[]; sum: number } {
   const rows: KclRow[] = [];
   for (const e of nl.elements) {
+    if (e.nodes.length > 2) {
+      // üç uçlu eleman: her pinden giren akım (düğümden çıkan)
+      const pi = pinI?.(e.id);
+      if (!pi) continue;
+      let sum = 0;
+      e.nodes.forEach((n, k) => n === node && (sum += pi[k]));
+      if (e.nodes.includes(node) && Math.abs(sum) > 0) rows.push({ id: e.id, current: sum });
+      else if (e.nodes.includes(node)) rows.push({ id: e.id, current: 0 });
+      continue;
+    }
     const [a, b] = e.nodes;
     if (a === b) continue;
     if (a === node) rows.push({ id: e.id, current: I(e.id) });
@@ -39,7 +54,7 @@ export function kvlLoop(nl: Netlist, id: string, V: (id: string) => number): { r
     const u = q.shift()!;
     if (u === a) break;
     for (const e of nl.elements) {
-      if (e.id === id) continue;
+      if (e.id === id || e.nodes.length > 2) continue;
       const [p, r] = e.nodes;
       const v = p === u ? r : r === u ? p : -1;
       if (v < 0 || seen.has(v)) continue;

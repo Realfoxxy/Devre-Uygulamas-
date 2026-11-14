@@ -1,6 +1,6 @@
 // Sonuç nesnesinden bileşen / düğüm değerlerinin gösterim metinleri.
 import { abs, argDeg, Complex } from '../core/complex';
-import { CompType, isSource } from '../core/circuit';
+import { CompType, Params, isSource } from '../core/circuit';
 import type { AnalysisResult } from '../core/results';
 import { formatEng } from '../core/units';
 
@@ -25,7 +25,53 @@ export function stepIndex(res: AnalysisResult, tIndex: number | null): number {
   return tIndex === null ? last : Math.max(0, Math.min(last, tIndex));
 }
 
+/** Üç uçlu elemanın pin gerilimleri (seçili anda) */
+export function pinVoltages(res: AnalysisResult, id: string, tIndex: number | null): Complex[] | null {
+  if (res.kind === 'dc') return res.comps[id]?.pinV?.map((v) => ({ re: v, im: 0 })) ?? null;
+  if (res.kind === 'ac') return res.comps[id]?.pinV ?? null;
+  const k = stepIndex(res, tIndex);
+  return res.comps[id]?.pinV?.map((a) => ({ re: a[k], im: 0 })) ?? null;
+}
+
 export function compDisplay(
+  res: AnalysisResult,
+  id: string,
+  type: CompType,
+  tIndex: number | null,
+  acMeasure: 'rms' | 'peak',
+  params?: Params,
+): CompDisplay | null {
+  const d = baseDisplay(res, id, type, tIndex, acMeasure);
+  if (!d) return null;
+  const vt = (z: Complex, u: string) => (res.kind === 'ac' ? phasorText(z, u) : formatEng(z.re, u));
+  const pv = pinVoltages(res, id, tIndex);
+  if (type === 'OA' && pv) {
+    const vi = compVI(res, id, tIndex)!;
+    d.rows = [
+      ...(res.kind === 'transient' ? d.rows.slice(0, 1) : []),
+      { label: 'v₊ (+ giriş)', value: vt(pv[0], 'V') },
+      { label: 'v₋ (− giriş)', value: vt(pv[1], 'V') },
+      { label: 'Çıkış gerilimi', value: vt(pv[2], 'V') },
+      { label: 'Çıkış akımı', value: vt(vi.I, 'A'), hint: 'op-amp çıkışından devreye' },
+    ];
+    if ((params?.model ?? 'ideal') !== 'finite')
+      d.rows.push({ label: 'İdeal op-amp', value: 'v₊ = v₋ (sanal kısa devre), i₊ = i₋ = 0' });
+  }
+  if (type === 'POT' && pv) d.rows.push({ label: 'Orta uç gerilimi', value: vt(pv[2], 'V'), hint: 'toprağa göre' });
+  if (type === 'SW2' && params) d.rows.push({ label: 'Konum', value: `ortak uç → ${params.way ?? 'A'}` });
+  if ((type === 'VM' || type === 'AM') && res.kind === 'dc' && res.idealMeters?.[id] !== undefined) {
+    const ideal = res.idealMeters[id];
+    const real = type === 'VM' ? res.comps[id].V : res.comps[id].I;
+    const err = Math.abs(ideal) > 1e-15 ? (Math.abs(real - ideal) / Math.abs(ideal)) * 100 : 0;
+    d.rows.push(
+      { label: 'İdeal alet ölçerdi', value: formatEng(ideal, type === 'VM' ? 'V' : 'A') },
+      { label: 'Yükleme hatası', value: `%${err.toPrecision(3)}`, hint: 'aletin iç direnci devreyi değiştiriyor' },
+    );
+  }
+  return d;
+}
+
+function baseDisplay(
   res: AnalysisResult,
   id: string,
   type: CompType,

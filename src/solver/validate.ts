@@ -5,7 +5,8 @@ import type { Issue, Netlist, NetElement } from '../core/netlist';
 
 /** Bu analizde dal akımı bilinmeyeni olan (gerilim tipi) elemanlar */
 export function isVoltageType(e: NetElement, mode: AnalysisType | 'tau'): boolean {
-  if (e.type === 'V' || e.type === 'AM' || e.type === 'E' || e.type === 'H') return true;
+  if (e.type === 'AM') return !e.params.real;
+  if (e.type === 'V' || e.type === 'E' || e.type === 'H' || e.type === 'OA') return true;
   if (e.type === 'L' && (mode === 'dc' || mode === 'tau')) return true;
   return false;
 }
@@ -16,22 +17,26 @@ export function validateTopology(nl: Netlist, mode: AnalysisType): Issue[] {
   const find = (a: number): number => (parent[a] === a ? a : (parent[a] = find(parent[a])));
 
   const vt = nl.elements.filter((e) => isVoltageType(e, mode));
+  // op-amp çıkışı toprağa göre bir gerilim kaynağı gibidir
+  const vpair = (e: NetElement): [number, number] => (e.type === 'OA' ? [e.nodes[2], 0] : [e.nodes[0], e.nodes[1]]);
   for (const e of vt) {
-    const [a, b] = e.nodes;
+    const [a, b] = vpair(e);
     if (a === b) {
       const what =
         e.type === 'V'
           ? `${e.id} gerilim kaynağının iki ucu kısa devre edilmiş.`
           : e.type === 'AM'
             ? `${e.id} ampermetresinin iki ucu aynı düğümde; içinden geçen akım belirsiz.`
-            : `${e.id} bobininin iki ucu aynı düğümde; DC'de akımı belirsiz.`;
+            : e.type === 'OA'
+              ? `${e.id} op-amp'ının çıkışı doğrudan toprağa bağlı.`
+              : `${e.id} bobininin iki ucu aynı düğümde; DC'de akımı belirsiz.`;
       issues.push({ level: 'error', message: `Çözülemeyen devre: ${what}`, compIds: [e.id] });
       continue;
     }
     const ra = find(a);
     const rb = find(b);
     if (ra === rb) {
-      const loop = vt.filter((o) => o.nodes[0] !== o.nodes[1] && find(o.nodes[0]) === ra).map((o) => o.id);
+      const loop = vt.filter((o) => vpair(o)[0] !== vpair(o)[1] && find(vpair(o)[0]) === ra).map((o) => o.id);
       const hasL = vt.some((o) => o.type === 'L' && loop.includes(o.id));
       issues.push({
         level: 'error',
@@ -45,12 +50,25 @@ export function validateTopology(nl: Netlist, mode: AnalysisType): Issue[] {
 
   // Toprağa "gerilim belirleyen" bir yol olmayan düğümler
   const adj: number[][] = Array.from({ length: nl.nodeCount + 1 }, () => []);
-  for (const e of nl.elements) {
-    if (e.type === 'I' || e.type === 'VM' || e.type === 'G' || e.type === 'F') continue;
-    if (e.type === 'C' && mode === 'dc') continue;
-    const [a, b] = e.nodes;
+  const link = (a: number, b: number) => {
     adj[a].push(b);
     adj[b].push(a);
+  };
+  for (const e of nl.elements) {
+    if (e.type === 'I' || e.type === 'G' || e.type === 'F' || e.type === 'TS') continue;
+    if (e.type === 'VM' && !e.params.real) continue;
+    if (e.type === 'C' && mode === 'dc') continue;
+    const [a, b, c] = e.nodes;
+    if (e.type === 'POT') {
+      link(a, c);
+      link(c, b);
+    } else if (e.type === 'SW2') {
+      link(a, b);
+      link(a, c);
+    } else if (e.type === 'OA') {
+      link(c, 0);
+      if (e.params.model === 'finite') link(a, b);
+    } else link(a, b);
   }
   const seen = new Array(nl.nodeCount + 1).fill(false);
   const stack = [0];

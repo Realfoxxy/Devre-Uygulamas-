@@ -34,7 +34,7 @@ export const MAX_WIRES = 3000;
 const ID_RE = /^[A-Za-z0-9]{1,16}$/;
 
 /** Bileşen parametrelerinde kabul edilen alanlar (bilinmeyenler atılır). */
-const NUMERIC_PARAMS = ['value', 'amp', 'freq', 'phase', 'v0', 'i0', 'gain'] as const;
+const NUMERIC_PARAMS = ['value', 'amp', 'freq', 'phase', 'v0', 'i0', 'gain', 'gainA', 'rin', 'rout', 'vos', 'ib', 'vsat', 'isat', 'slew', 'pos', 'kT', 'tempC', 'vmin', 'vmax', 'rMeter'] as const;
 const MODE_VALUES = ['DC', 'AC'];
 
 class FileError extends Error {}
@@ -52,6 +52,10 @@ function cleanParams(type: CompType, raw: unknown): Params {
   const r = raw as Record<string, unknown>;
   for (const k of NUMERIC_PARAMS) if (finite(r[k])) (out as Record<string, unknown>)[k] = r[k];
   if (typeof r.mode === 'string' && MODE_VALUES.includes(r.mode)) out.mode = r.mode as Params['mode'];
+  if (r.model === 'ideal' || r.model === 'finite' || r.model === 'offset') out.model = r.model;
+  if (r.way === 'A' || r.way === 'B') out.way = r.way;
+  if (typeof r.real === 'boolean') out.real = r.real;
+  if (out.pos !== undefined) out.pos = Math.min(1, Math.max(0, out.pos));
   const c = r.ctrl as Record<string, unknown> | undefined;
   if (isDependent(type) && c && typeof c === 'object' && typeof c.ref === 'string' && ID_RE.test(c.ref))
     out.ctrl = { ref: c.ref, kind: ctrlKindOf(type) };

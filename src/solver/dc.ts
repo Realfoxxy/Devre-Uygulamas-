@@ -14,8 +14,10 @@ export function solveDC(nl: Netlist, extra: Partial<StampCtx> = {}): DCResult {
   const comps: Record<string, DCComp> = {};
   for (const e of nl.elements) {
     if (ctx.exclude?.has(e.id)) continue;
-    const { V, I } = measureElement(e, ctx, sol);
-    comps[e.id] = { V: V.re, I: I.re, P: V.re * I.re };
+    const m = measureElement(e, ctx, sol);
+    comps[e.id] = { V: m.V.re, I: m.I.re, P: e.type === 'OA' ? -m.V.re * m.I.re : m.V.re * m.I.re };
+    if (m.pinV) comps[e.id].pinV = m.pinV.map((z) => z.re);
+    if (m.pinI) comps[e.id].pinI = m.pinI.map((z) => z.re);
   }
   return {
     kind: 'dc',

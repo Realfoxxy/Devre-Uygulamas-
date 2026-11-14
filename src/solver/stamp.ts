@@ -30,6 +30,25 @@ export interface StampCtx {
   byId: Map<string, NetElement>;
   /** Bağımlı kaynak kazançlarını değiştirmek için (cebirsel döngü teşhisi) */
   gainScale?: Map<string, number>;
+  /** Elemanların iç düğümleri (ör. sonlu kazançlı op-amp) → düğüm numarası */
+  internal: Map<string, number>;
+  /** İç düğümler dahil toplam düğüm sayısı */
+  nodeTotal: number;
+}
+
+export const R_ON = 1e-3;
+export const R_OFF = 1e12;
+const MIN_R = 1e-3;
+
+/** İç düğüm gerektiren elemanlar için numara ayırır. */
+function allocInternal(nl: Netlist): Map<string, number> {
+  const m = new Map<string, number>();
+  let k = nl.nodeCount;
+  for (const e of nl.elements) {
+    if (e.type === 'OA' && e.params.model === 'finite') m.set(`${e.id}#x`, ++k);
+    if (e.type === 'OA' && e.params.model === 'offset') m.set(`${e.id}#p`, ++k);
+  }
+  return m;
 }
 
 export function makeCtx(mode: StampMode, nl: Netlist, extra: Partial<StampCtx> = {}): StampCtx {
@@ -42,8 +61,26 @@ export function makeCtx(mode: StampMode, nl: Netlist, extra: Partial<StampCtx> =
     state: new Map(),
     ctrlI: currentControlled(nl),
     byId: new Map(nl.elements.map((e) => [e.id, e])),
+    ...(() => {
+      const internal = allocInternal(nl);
+      return { internal, nodeTotal: nl.nodeCount + internal.size };
+    })(),
     ...extra,
   };
+}
+
+/** Sıcaklık sensörünün akımı I = k·T (kelvin) */
+export const tsCurrent = (e: NetElement) => Number(e.params.kT ?? 1e-6) * (Number(e.params.tempC ?? 25) + 273.15);
+/** Potansiyometrenin iki parçası: üst (pin0–orta) ve alt (orta–pin1) */
+export const potParts = (e: NetElement) => {
+  const Rp = Number(e.params.value);
+  const a = Math.min(1, Math.max(0, Number(e.params.pos ?? 0.5)));
+  return { top: Math.max(MIN_R, (1 - a) * Rp), bottom: Math.max(MIN_R, a * Rp) };
+};
+/** İki yollu anahtarın ortak–A ve ortak–B dirençleri (t anında) */
+export function sw2Parts(e: NetElement, _ctx: StampCtx) {
+  const onA = (e.params.way ?? 'A') === 'A';
+  return { rA: onA ? R_ON : R_OFF, rB: onA ? R_OFF : R_ON };
 }
 
 /** Akımı bağımlı bir kaynak tarafından kontrol edilen elemanlar */
@@ -81,6 +118,10 @@ export function branchIds(nl: Netlist, ctx: StampCtx): string[] {
       case 'H':
         out.push(e.id);
         break;
+      case 'OA':
+        out.push(e.id);
+        if (e.params.model === 'offset') out.push(`${e.id}#os`);
+        break;
       case 'L':
         if (ctx.mode === 'dc' || ctx.ctrlI.has(e.id)) out.push(e.id);
         break;
@@ -106,8 +147,10 @@ function companion(e: NetElement, ctx: StampCtx) {
   return { G, Ieq: ctx.trap ? st.i + G * st.v : st.i };
 }
 
-export function newSystem(nl: Netlist, ctx: StampCtx, track = true): MNASystem {
-  return new MNASystem(nl.nodeCount, branchIds(nl, ctx), track);
+export function newSystem(nl: Netlist, ctx: StampCtx, track = true, extraBranches: string[] = []): MNASystem {
+  const labels: Record<number, string> = {};
+  for (const [k, n] of ctx.internal) labels[n] = `v(${k.replace('#x', '·iç').replace('#p', '·+iç')})`;
+  return new MNASystem(ctx.nodeTotal, [...branchIds(nl, ctx), ...extraBranches], track, labels);
 }
 
 const gainOf = (e: NetElement, ctx: StampCtx) => Number(e.params.gain ?? 0) * (ctx.gainScale?.get(e.id) ?? 1);
@@ -200,11 +243,54 @@ export function stampElement(sys: MNASystem, e: NetElement, ctx: StampCtx) {
     case 'I':
       sys.stampCurrent(a, b, sourceValue(e, ctx), id);
       return;
+    case 'TS':
+      sys.stampCurrent(a, b, ctx.zero && ctx.keep !== id ? ZERO : cx(tsCurrent(e)), id);
+      return;
     case 'AM':
-      sys.stampVoltage(a, b, id, ZERO, id);
+      // gerçek ampermetre: seri iç direnç
+      sys.stampBranch(a, b, id, ZERO, e.params.real ? cx(Number(e.params.rMeter ?? 1)) : ZERO, id);
       return;
     case 'VM':
+      if (e.params.real) sys.stampAdmittance(a, b, cx(1 / Number(e.params.rMeter ?? 10e6)), id);
       return; // ideal voltmetre: açık devre
+    case 'POT': {
+      const w = e.nodes[2];
+      const { top, bottom } = potParts(e);
+      sys.stampAdmittance(a, w, cx(1 / top), id);
+      sys.stampAdmittance(w, b, cx(1 / bottom), id);
+      return;
+    }
+    case 'SW2': {
+      const [c, pa, pb] = e.nodes;
+      const { rA, rB } = sw2Parts(e, ctx);
+      sys.stampAdmittance(c, pa, cx(1 / rA), id);
+      sys.stampAdmittance(c, pb, cx(1 / rB), id);
+      return;
+    }
+    case 'OA': {
+      const [p, n, o] = e.nodes;
+      const model = e.params.model ?? 'ideal';
+      if (model === 'finite') {
+        // girişler arasında R_i, içeride A·(v+ − v−) değerinde VCVS, çıkışta seri R_o
+        const x = ctx.internal.get(`${id}#x`)!;
+        sys.stampAdmittance(p, n, cx(1 / Number(e.params.rin ?? 1e6)), id);
+        sys.stampVCVS(x, 0, p, n, id, Number(e.params.gainA ?? 1e5), id);
+        sys.stampAdmittance(x, o, cx(1 / Number(e.params.rout ?? 100)), id);
+        return;
+      }
+      if (model === 'offset') {
+        // + girişe seri V_os, iki girişte öngerilim akımı I_b; çekirdek ideal
+        const pp = ctx.internal.get(`${id}#p`)!;
+        sys.stampVoltage(pp, p, `${id}#os`, cx(Number(e.params.vos ?? 5e-3)), id);
+        const Ib = Number(e.params.ib ?? 500e-9);
+        sys.stampCurrent(p, 0, cx(Ib), id);
+        sys.stampCurrent(n, 0, cx(Ib), id);
+        sys.stampIdealOpAmp(o, pp, n, id, id);
+        return;
+      }
+      sys.stampIdealOpAmp(o, p, n, id, id);
+      return;
+    }
     case 'E':
     case 'G': {
       const ref = ctx.byId.get(e.params.ctrl?.ref ?? '');
@@ -254,7 +340,15 @@ export function solutionFrom(sys: MNASystem, x: { re: ArrayLike<number>; im?: Ar
 }
 
 /** Elemanın pasif işaret kuralıyla gerilimi (+ uçtan − uca) ve akımı (+ uçtan giren). */
-export function measureElement(e: NetElement, ctx: StampCtx, sol: Solution): { V: Complex; I: Complex } {
+export interface Measure {
+  V: Complex;
+  I: Complex;
+  /** Üç uçlu elemanlarda pin gerilimleri ve her pinden giren akım */
+  pinV?: Complex[];
+  pinI?: Complex[];
+}
+
+export function measureElement(e: NetElement, ctx: StampCtx, sol: Solution): Measure {
   const [a, b] = e.nodes;
   const va = sol.v(a);
   const vb = sol.v(b);
@@ -284,9 +378,39 @@ export function measureElement(e: NetElement, ctx: StampCtx, sol: Solution): { V
     case 'I':
       return { V, I: sourceValue(e, ctx) };
     case 'AM':
-      return { V: ZERO, I: sol.j(e.id) };
+      return { V: e.params.real ? V : ZERO, I: sol.j(e.id) };
     case 'VM':
-      return { V, I: ZERO };
+      return { V, I: e.params.real ? cx(V.re / Number(e.params.rMeter ?? 10e6), V.im / Number(e.params.rMeter ?? 10e6)) : ZERO };
+    case 'TS':
+      return { V, I: ctx.zero && ctx.keep !== e.id ? ZERO : cx(tsCurrent(e)) };
+    case 'POT': {
+      const vw = sol.v(e.nodes[2]);
+      const { top } = potParts(e);
+      return { V, I: cx((va.re - vw.re) / top, (va.im - vw.im) / top), pinV: [va, vb, vw] };
+    }
+    case 'SW2': {
+      const [c, pa, pb] = e.nodes.map((k) => sol.v(k));
+      const { rA, rB } = sw2Parts(e, ctx);
+      const iA = cx((c.re - pa.re) / rA, (c.im - pa.im) / rA);
+      const iB = cx((c.re - pb.re) / rB, (c.im - pb.im) / rB);
+      const onA = (e.params.way ?? 'A') === 'A';
+      return { V: onA ? cx(c.re - pa.re, c.im - pa.im) : cx(c.re - pb.re, c.im - pb.im), I: onA ? iA : iB, pinV: [c, pa, pb], pinI: [cx(iA.re + iB.re, iA.im + iB.im), cx(-iA.re, -iA.im), cx(-iB.re, -iB.im)] };
+    }
+    case 'OA': {
+      const [vp, vn, vo] = e.nodes.map((k) => sol.v(k));
+      let iout: Complex;
+      if ((e.params.model ?? 'ideal') === 'finite') {
+        const vx = sol.v(ctx.internal.get(`${e.id}#x`)!);
+        const ro = Number(e.params.rout ?? 100);
+        iout = cx((vx.re - vo.re) / ro, (vx.im - vo.im) / ro);
+      } else {
+        const j = sol.j(e.id); // j: o düğümünden op-amp'a giren akım
+        iout = cx(-j.re, -j.im);
+      }
+      const rin = Number(e.params.rin ?? 1e6);
+      const iin = (e.params.model ?? 'ideal') === 'finite' ? cx((vp.re - vn.re) / rin, (vp.im - vn.im) / rin) : ZERO;
+      return { V: vo, I: iout, pinV: [vp, vn, vo], pinI: [iin, cx(-iin.re, -iin.im), cx(-iout.re, -iout.im)] };
+    }
     case 'E':
     case 'H':
       return { V, I: sol.j(e.id) };

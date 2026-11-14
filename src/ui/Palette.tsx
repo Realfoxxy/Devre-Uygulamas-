@@ -4,7 +4,7 @@ import { useStore } from '../state/store';
 import { canvasApi } from './Canvas';
 import { PartIcon } from './parts/symbols';
 
-const GROUPS = ['Pasif', 'Kaynaklar', 'Bağımlı kaynaklar', 'Ölçü aletleri'] as const;
+const GROUPS = ['Pasif', 'Kaynaklar', 'Bağımlı kaynaklar', 'Op-amp ve dönüştürücüler', 'Anahtarlar', 'Ölçü aletleri'] as const;
 
 export function Palette({ onPicked }: { onPicked?: () => void }) {
   const placing = useStore((s) => s.placing);

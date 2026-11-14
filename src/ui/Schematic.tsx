@@ -1,5 +1,5 @@
 // Devre şeması: hem etkileşimli çizim alanında hem de PDF / SVG dışa aktarımında kullanılır.
-import { Component, Pt, Wire, onSegment, pinPositions, ptKey } from '../core/circuit';
+import { Component, Pt, Wire, isMultiPin, onSegment, pinPositions, ptKey } from '../core/circuit';
 import type { Netlist } from '../core/netlist';
 import type { AnalysisResult } from '../core/results';
 import { G, PartLabel, PartSymbol, Theme } from './parts/symbols';
@@ -126,7 +126,7 @@ export function Schematic(p: SchematicProps) {
         const sel = p.selectedComp === c.id || !!p.selectedComps?.has(c.id);
         const color = err ? ERR_COLOR : sel ? SEL_COLOR : undefined;
         let extra: string | undefined;
-        if (results && (c.type === 'VM' || c.type === 'AM' || (p.arrowFor === c.id && !p.stale))) {
+        if (results && (c.type === 'VM' || c.type === 'AM' || (p.arrowFor === c.id && !p.stale && !isMultiPin(c.type)))) {
           const d = compDisplay(results, c.id, c.type, p.tIndex ?? null, p.acMeasure ?? 'rms');
           if (d && c.type === 'VM') extra = d.rows.find((r) => r.label.startsWith('Gerilim'))?.value;
           else if (d && c.type === 'AM') extra = d.rows.find((r) => r.label.startsWith('Akım'))?.value;
@@ -138,6 +138,10 @@ export function Schematic(p: SchematicProps) {
               <g transform={`translate(${c.x * G} ${c.y * G}) rotate(${c.rot})`}>
                 {c.type === 'GND' ? (
                   <rect x={-15} y={-2} width={30} height={26} fill="transparent" />
+                ) : c.type === 'OA' || c.type === 'SW2' ? (
+                  <rect x={-24} y={-30} width={52} height={60} fill="transparent" />
+                ) : c.type === 'POT' ? (
+                  <rect x={-30} y={-30} width={60} height={48} fill="transparent" />
                 ) : (
                   <rect x={-30} y={-18} width={60} height={36} fill="transparent" />
                 )}
@@ -152,6 +156,8 @@ export function Schematic(p: SchematicProps) {
               <g transform={`translate(${c.x * G} ${c.y * G}) rotate(${c.rot})`}>
                 {c.type === 'GND' ? (
                   <rect x={-18} y={-6} width={36} height={32} rx={6} fill="rgba(37,87,214,0.08)" stroke={SEL_COLOR} strokeDasharray="4 3" />
+                ) : c.type === 'OA' || c.type === 'SW2' || c.type === 'POT' ? (
+                  <rect x={-34} y={-36} width={68} height={72} rx={6} fill="rgba(37,87,214,0.08)" stroke={SEL_COLOR} strokeDasharray="4 3" />
                 ) : (
                   <rect x={-34} y={-21} width={68} height={42} rx={6} fill="rgba(37,87,214,0.08)" stroke={SEL_COLOR} strokeDasharray="4 3" />
                 )}
@@ -181,7 +187,7 @@ export function Schematic(p: SchematicProps) {
       {/* seçili bileşenin akım yönü */}
       {results && p.arrowFor && !p.stale && (() => {
         const c = components.find((cc) => cc.id === p.arrowFor);
-        if (!c || c.type === 'GND' || c.type === 'VM') return null;
+        if (!c || c.type === 'GND' || c.type === 'VM' || isMultiPin(c.type)) return null;
         const d = compDisplay(results, c.id, c.type, p.tIndex ?? null, p.acMeasure ?? 'rms');
         if (!d) return null;
         return <CurrentArrow comp={c} sign={d.currentSign} />;
