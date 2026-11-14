@@ -21,6 +21,9 @@ Hiçbir veri sunucuya gitmez.
 - **Teoremler (Bölüm 5):** kaynak dönüşümü (devrede uygulanır, öncesi/sonrası tablosu), süperpozisyon tablosu (güç
   toplanmaz notu), iki noktaya dokunarak Thevenin / Norton (R_th = 0, ∞ ve negatif durumları), eşdeğer direnç, maksimum güç
   (DC'de R_L taraması, AC'de Z_L = Z_th*).
+- **Op-amp ve çok uçlu elemanlar (Bölüm 2.6–2.9, 6):** ideal, sonlu kazançlı ve ofsetli op-amp modeli (doyum, akım ve eğim hızı
+  uyarıları, geri besleme yok hatası, ideale göre % fark); potansiyometre (kaydırıcı), sıcaklık sensörü, gerçek voltmetre /
+  ampermetre (yükleme hatası), iki yollu anahtar.
 - **Lab:** ölçülen V / I değerini girince yüzde hata; **Çözümü göster** modunda netlist ve MNA matrisi
   (seçili bileşenin damgası renkli).
 - **Rapor:** başlık bloğu, vektör devre şeması, analiz ayarları, sonuç tablosu (ölçülen + % hata),

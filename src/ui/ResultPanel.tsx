@@ -8,6 +8,7 @@ import { formatEng, percentError } from '../core/units';
 import { isStale, useStore } from '../state/store';
 import { SolutionView } from './SolutionView';
 import { DependentFields } from './DependentFields';
+import { ExtraFields } from './ExtraFields';
 import { TheoremPanel } from './TheoremCard';
 import { KclPanel, KvlPanel, SeriesParallelPanel } from './KirchhoffPanels';
 import { ValueInput } from './ValueInput';
@@ -145,6 +146,7 @@ function ParamEditor({ comp }: { comp: Component }) {
       <div className="fields">
         {rows}
         <DependentFields comp={comp} />
+        <ExtraFields comp={comp} />
       </div>
       {(comp.type === 'V' || comp.type === 'I') && p.mode === 'AC' && (
         <p className="muted small">
@@ -202,7 +204,7 @@ function CompResults({ comp }: { comp: Component }) {
   const s = useStore();
   const res = s.results;
   if (!res) return <p className="muted small">Değerleri görmek için analizi çalıştırın.</p>;
-  const d = compDisplay(res, comp.id, comp.type, s.tIndex, s.doc.analysis.acMeasure);
+  const d = compDisplay(res, comp.id, comp.type, s.tIndex, s.doc.analysis.acMeasure, comp.params);
   if (!d) return <p className="muted small">Bu bileşen son analizde yoktu; yeniden çalıştırın.</p>;
   const nodes = s.resultsNetlist?.pinNodes[comp.id];
   return (
@@ -225,7 +227,9 @@ function CompResults({ comp }: { comp: Component }) {
             <tr>
               <th>Düğümler</th>
               <td>
-                + {nodes[0]} / − {nodes[1]}
+                {PARTS[comp.type].pinNames
+                  ? nodes.map((n, i) => `${PARTS[comp.type].pinNames![i]}: ${n}`).join(' · ')
+                  : `+ ${nodes[0]} / − ${nodes[1]}`}
               </td>
             </tr>
           )}

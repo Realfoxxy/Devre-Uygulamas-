@@ -39,6 +39,16 @@ export default function App() {
     };
   }, []);
 
+  // Potansiyometre bırakılınca devre güncel sonuç gösteriyorsa yeniden çöz
+  useEffect(() => {
+    const h = () => {
+      const st = useStore.getState();
+      if (st.results) st.run();
+    };
+    window.addEventListener('devre:rerun', h);
+    return () => window.removeEventListener('devre:rerun', h);
+  }, []);
+
   // Klavye kısayolları
   useEffect(() => {
     const h = (e: KeyboardEvent) => {

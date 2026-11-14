@@ -99,6 +99,8 @@ export function solveTransient(nl: Netlist, s: AnalysisSettings): { result: Tran
   const nodeV: Float64Array[] = Array.from({ length: n + 1 }, () => new Float64Array(steps + 1));
   const cV: Record<string, Float64Array> = {};
   const cI: Record<string, Float64Array> = {};
+  const pinV: Record<string, Float64Array[]> = {};
+  const pinI: Record<string, Float64Array[]> = {};
   for (const e of els) {
     cV[e.id] = new Float64Array(steps + 1);
     cI[e.id] = new Float64Array(steps + 1);
@@ -116,9 +118,15 @@ export function solveTransient(nl: Netlist, s: AnalysisSettings): { result: Tran
     nodeV[0][k] = 0;
     for (let i = 1; i <= n; i++) nodeV[i][k] = x[i - 1];
     for (const e of els) {
-      const { V, I } = measureElement(e, ctx, sol);
-      cV[e.id][k] = V.re;
-      cI[e.id][k] = I.re;
+      const m = measureElement(e, ctx, sol);
+      cV[e.id][k] = m.V.re;
+      cI[e.id][k] = m.I.re;
+      if (m.pinV) {
+        const pv = (pinV[e.id] ??= m.pinV.map(() => new Float64Array(steps + 1)));
+        const pi = (pinI[e.id] ??= m.pinV.map(() => new Float64Array(steps + 1)));
+        m.pinV.forEach((z, i) => (pv[i][k] = z.re));
+        m.pinI?.forEach((z, i) => (pi[i][k] = z.re));
+      }
     }
   };
 
@@ -191,7 +199,7 @@ export function solveTransient(nl: Netlist, s: AnalysisSettings): { result: Tran
   }
 
   const comps: TranResult['comps'] = {};
-  for (const e of els) comps[e.id] = { V: cV[e.id], I: cI[e.id] };
+  for (const e of els) comps[e.id] = { V: cV[e.id], I: cI[e.id], pinV: pinV[e.id], pinI: pinI[e.id] };
   return {
     result: { kind: 'transient', t, nodeV, comps, tau: taus, h, tStop, method: s.method, system: dump! },
     info,

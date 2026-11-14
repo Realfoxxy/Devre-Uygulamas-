@@ -34,9 +34,9 @@ function solveAt(nl: Netlist, f: number, track: boolean) {
   for (let k = 1; k <= nl.nodeCount; k++) nodeV.push(cx(x.re[k - 1], x.im[k - 1]));
   const comps: Record<string, ACComp> = {};
   for (const e of nl.elements) {
-    const { V, I } = measureElement(e, ctx, sol);
+    const m = measureElement(e, ctx, sol);
     const Z = impedanceOf(e, ctx.w);
-    comps[e.id] = { V, I, Z, P: mul(V, conj(I)).re / 2 };
+    comps[e.id] = { V: m.V, I: m.I, Z, P: mul(m.V, conj(m.I)).re / 2, pinV: m.pinV, pinI: m.pinI };
   }
   return { sys, x, nodeV, comps };
 }

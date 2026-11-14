@@ -15,8 +15,16 @@ export function KclPanel({ wireId }: { wireId: string }) {
   const node = nl.wireNodes[wireId];
   if (node === undefined || node < 0) return <p className="muted small">Bu kablo hiçbir bileşene bağlı değil.</p>;
   const get = (id: string, part: 're' | 'im') => compVI(res, id, s.tIndex)?.I[part] ?? 0;
-  const re = kclAt(nl, node, (id) => get(id, 're'));
-  const im = kclAt(nl, node, (id) => get(id, 'im'));
+  const pin = (id: string, part: 're' | 'im') => {
+    const c = res.comps[id] as { pinI?: unknown };
+    if (!c?.pinI) return undefined;
+    if (res.kind === 'dc') return (c.pinI as number[]).map((x) => (part === 're' ? x : 0));
+    if (res.kind === 'ac') return (c.pinI as { re: number; im: number }[]).map((z) => z[part]);
+    const k = res.kind === 'transient' ? (s.tIndex ?? res.t.length - 1) : 0;
+    return (c.pinI as Float64Array[]).map((a) => (part === 're' ? a[k] : 0));
+  };
+  const re = kclAt(nl, node, (id) => get(id, 're'), (id) => pin(id, 're'));
+  const im = kclAt(nl, node, (id) => get(id, 'im'), (id) => pin(id, 'im'));
   return (
     <div className="kcl">
       <div className="panel-title">KAY — düğüm {node === 0 ? '0 (toprak)' : node}</div>

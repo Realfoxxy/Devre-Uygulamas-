@@ -225,10 +225,18 @@ export function describeValue(type: CompType, p: Params): string {
       const gs = type === 'H' ? formatEng(g, 'Ω').replace(' ', '') : type === 'G' ? formatEng(g, 'S').replace(' ', '') : String(parseFloat(g.toPrecision(4)));
       return `${gs}·${k === 'V' ? 'v' : 'i'}(${ref})`;
     }
+    case 'OA':
+      return p.model === 'finite' ? `A = ${formatEng(p.gainA ?? 1e5, '')}`.trim() : p.model === 'offset' ? 'ofsetli' : 'ideal';
+    case 'POT':
+      return `${formatEng(p.value ?? 0, 'Ω')}, a = ${(p.pos ?? 0.5).toFixed(2)}`;
+    case 'TS':
+      return `${formatEng(p.kT ?? 1e-6, 'A/K')}, ${+(p.tempC ?? 25).toFixed(1)} °C`;
+    case 'SW2':
+      return `→ ${p.way ?? 'A'}`;
     case 'VM':
-      return 'voltmetre';
+      return p.real ? `gerçek, ${formatEng(p.rMeter ?? 10e6, 'Ω')}` : 'voltmetre';
     case 'AM':
-      return 'ampermetre';
+      return p.real ? `gerçek, ${formatEng(p.rMeter ?? 1, 'Ω')}` : 'ampermetre';
     default:
       return '';
   }

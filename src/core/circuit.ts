@@ -1,6 +1,6 @@
 // Bileşen ve kablo veri modeli. Koordinatlar ızgara birimindedir.
 
-export type CompType = 'R' | 'C' | 'L' | 'V' | 'I' | 'GND' | 'VM' | 'AM' | 'E' | 'F' | 'G' | 'H';
+export type CompType = 'R' | 'C' | 'L' | 'V' | 'I' | 'GND' | 'VM' | 'AM' | 'E' | 'F' | 'G' | 'H' | 'OA' | 'POT' | 'TS' | 'SW2';
 
 /** Bağımlı kaynaklar: E (VCVS), H (CCVS), G (VCCS), F (CCCS) */
 export const DEPENDENT: CompType[] = ['E', 'F', 'G', 'H'];
@@ -28,6 +28,30 @@ export interface Params {
   gain?: number;
   /** Bağımlı kaynağın kontrol büyüklüğü: başka bir bileşenin gerilimi (V) ya da akımı (I) */
   ctrl?: { ref: string; kind: 'V' | 'I' };
+  /** Op-amp modeli */
+  model?: 'ideal' | 'finite' | 'offset';
+  /** Op-amp: açık çevrim kazancı, giriş / çıkış direnci, ofset gerilimi, öngerilim akımı */
+  gainA?: number;
+  rin?: number;
+  rout?: number;
+  vos?: number;
+  ib?: number;
+  /** Op-amp sınırları: doyum gerilimi, doyum akımı, eğim hızı (V/s) */
+  vsat?: number;
+  isat?: number;
+  slew?: number;
+  /** Potansiyometre konumu (0–1, alt uçtan) */
+  pos?: number;
+  /** Sıcaklık sensörü: k (A/K), sıcaklık (°C), çalışma aralığı */
+  kT?: number;
+  tempC?: number;
+  vmin?: number;
+  vmax?: number;
+  /** Ölçü aleti: gerçek model (iç direnç) */
+  real?: boolean;
+  rMeter?: number;
+  /** İki yollu anahtar: ortak uç hangi konumda */
+  way?: 'A' | 'B';
 }
 
 export interface Component {
@@ -103,7 +127,9 @@ export interface PartDef {
   /** Paletteki kısa ad */
   short?: string;
   /** Palet grubu */
-  group: 'Pasif' | 'Kaynaklar' | 'Bağımlı kaynaklar' | 'Ölçü aletleri';
+  group: 'Pasif' | 'Kaynaklar' | 'Bağımlı kaynaklar' | 'Op-amp ve dönüştürücüler' | 'Anahtarlar' | 'Ölçü aletleri';
+  /** Pin adları (üç uçlu elemanlar) */
+  pinNames?: string[];
   prefix: string;
   pins: Pt[];
   defaultRot: number;
@@ -192,9 +218,9 @@ export const PARTS: Record<CompType, PartDef> = {
     prefix: 'VM',
     pins: TWO_PIN,
     defaultRot: 90,
-    defaultParams: {},
+    defaultParams: { real: false, rMeter: 10e6 },
     unit: 'V',
-    help: 'İdeal voltmetre: iki nokta arasındaki gerilimi ölçer (açık devre)',
+    help: 'Voltmetre: iki nokta arasındaki gerilimi ölçer. İdealde açık devre; gerçekte iç direnci var (varsayılan 10 MΩ)',
   },
   AM: {
     type: 'AM',
@@ -203,9 +229,72 @@ export const PARTS: Record<CompType, PartDef> = {
     prefix: 'AM',
     pins: TWO_PIN,
     defaultRot: 0,
-    defaultParams: {},
+    defaultParams: { real: false, rMeter: 1 },
     unit: 'A',
-    help: 'İdeal ampermetre: içinden geçen akımı ölçer (kısa devre); seri bağlanır',
+    help: 'Ampermetre: içinden geçen akımı ölçer; seri bağlanır. İdealde kısa devre; gerçekte iç direnci var (varsayılan 1 Ω)',
+  },
+  OA: {
+    type: 'OA',
+    group: 'Op-amp ve dönüştürücüler',
+    name: 'İşlemsel yükselteç (op-amp)',
+    short: 'Op-amp',
+    prefix: 'OA',
+    pins: [
+      [-2, 1],
+      [-2, -1],
+      [2, 0],
+    ],
+    pinNames: ['+', '−', 'çıkış'],
+    defaultRot: 0,
+    defaultParams: { model: 'ideal', gainA: 1e5, rin: 1e6, rout: 100, vos: 5e-3, ib: 500e-9, vsat: 15, isat: 10e-3, slew: 0.5e6 },
+    unit: '',
+    help: 'Girişler + ve −, çıkış toprağa göre. Besleme pinleri yok; doyum yalnızca uyarı olarak gösterilir.',
+  },
+  POT: {
+    type: 'POT',
+    group: 'Op-amp ve dönüştürücüler',
+    name: 'Potansiyometre',
+    short: 'Potansiyometre',
+    prefix: 'POT',
+    pins: [
+      [-2, 0],
+      [2, 0],
+      [0, -2],
+    ],
+    pinNames: ['üst uç', 'alt uç', 'orta uç'],
+    defaultRot: 90,
+    defaultParams: { value: 10000, pos: 0.5 },
+    unit: 'Ω',
+    help: 'Toplam direnç R_p; orta uç alt uçtan a·R_p uzaklıkta (a = 0–1)',
+  },
+  TS: {
+    type: 'TS',
+    group: 'Op-amp ve dönüştürücüler',
+    name: 'Sıcaklık sensörü',
+    short: 'Sıcaklık sensörü',
+    prefix: 'TS',
+    pins: TWO_PIN,
+    defaultRot: 270,
+    defaultParams: { kT: 1e-6, tempC: 25, vmin: 4, vmax: 30 },
+    unit: 'A',
+    help: 'Mutlak sıcaklıkla orantılı akım kaynağı: I = k·T (T kelvin); ok yönünde akar',
+  },
+  SW2: {
+    type: 'SW2',
+    group: 'Anahtarlar',
+    name: 'İki yollu anahtar',
+    short: 'İki yollu anahtar',
+    prefix: 'SW',
+    pins: [
+      [-2, 0],
+      [2, -1],
+      [2, 1],
+    ],
+    pinNames: ['ortak', 'A', 'B'],
+    defaultRot: 0,
+    defaultParams: { way: 'A' },
+    unit: '',
+    help: 'Ortak uç A ya da B konumuna bağlanır (kapalı 1 mΩ, açık 1 TΩ)',
   },
   E: {
     type: 'E',
@@ -257,7 +346,10 @@ export const PARTS: Record<CompType, PartDef> = {
   },
 };
 
-export const PALETTE_ORDER: CompType[] = ['R', 'C', 'L', 'V', 'I', 'GND', 'E', 'H', 'G', 'F', 'VM', 'AM'];
+export const PALETTE_ORDER: CompType[] = ['R', 'C', 'L', 'V', 'I', 'GND', 'E', 'H', 'G', 'F', 'OA', 'POT', 'TS', 'SW2', 'VM', 'AM'];
+
+/** Üç uçlu elemanlar */
+export const isMultiPin = (t: CompType) => t === 'OA' || t === 'POT' || t === 'SW2';
 
 /** Akım kontrolü için seçilebilen bileşenler */
 export const CURRENT_CTRL_TYPES: CompType[] = ['V', 'AM', 'R', 'L', 'C', 'I', 'E', 'H'];

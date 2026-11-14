@@ -66,6 +66,11 @@ const fail = (message: string): MeshResult => ({
 });
 
 export function meshEquations(components: Component[], wires: Wire[], nl: Netlist): MeshResult {
+  const multi = nl.elements.find((e) => e.nodes.length > 2 || e.type === 'TS' || ((e.type === 'VM' || e.type === 'AM') && e.params.real));
+  if (multi)
+    return fail(
+      `Çevre denklemleri ${multi.id} (${multi.type === 'OA' ? 'op-amp' : multi.type === 'POT' ? 'potansiyometre' : multi.type === 'SW2' ? 'anahtar' : multi.type === 'TS' ? 'sıcaklık sensörü' : 'gerçek ölçü aleti'}) içeren devrelerde yazılmıyor; düğüm yöntemini kullanın.`,
+    );
   const elById = new Map(nl.elements.map((e) => [e.id, e]));
   const pts = new Map<string, Pt>();
   const addPt = (p: Pt) => pts.set(ptKey(p), p);
