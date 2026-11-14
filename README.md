@@ -24,6 +24,8 @@ Hiçbir veri sunucuya gitmez.
 - **Op-amp ve çok uçlu elemanlar (Bölüm 2.6–2.9, 6):** ideal, sonlu kazançlı ve ofsetli op-amp modeli (doyum, akım ve eğim hızı
   uyarıları, geri besleme yok hatası, ideale göre % fark); potansiyometre (kaydırıcı), sıcaklık sensörü, gerçek voltmetre /
   ampermetre (yükleme hatası), iki yollu anahtar.
+- **Kaynak dalga biçimleri (Bölüm 1, 8, 9):** DC, AC, basamak, darbe / kare dalga, üstel, rampa, anahtarlanan sinüs, parçalı
+  doğrusal (önizleme grafiğiyle); kırılma noktalarına hizalı zaman adımı, kenardan sonra geri Euler; iki imleç arasında enerji w = ∫p dt.
 - **Lab:** ölçülen V / I değerini girince yüzde hata; **Çözümü göster** modunda netlist ve MNA matrisi
   (seçili bileşenin damgası renkli).
 - **Rapor:** başlık bloğu, vektör devre şeması, analiz ayarları, sonuç tablosu (ölçülen + % hata),

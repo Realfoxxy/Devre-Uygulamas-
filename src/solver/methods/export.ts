@@ -74,13 +74,35 @@ export function toSpice(nl: Netlist, title = 'Devre Lab Simülatörü'): string 
         break;
       }
       case 'V':
-      case 'I':
-        lines.push(
-          p.mode === 'AC'
-            ? `${e.id} ${a} ${b} AC ${n(Number(p.amp))} ${n(Number(p.phase ?? 0))}`
-            : `${e.id} ${a} ${b} DC ${n(Number(p.value ?? 0))}`,
-        );
+      case 'I': {
+        const td = Number(p.td ?? 0);
+        const w0 = Number(p.w0 ?? 0);
+        const w1 = Number(p.w1 ?? 0);
+        switch (p.mode) {
+          case 'AC':
+            lines.push(`${e.id} ${a} ${b} AC ${n(Number(p.amp))} ${n(Number(p.phase ?? 0))}`);
+            break;
+          case 'STEP':
+            lines.push(`${e.id} ${a} ${b} PWL(0 ${n(w0)} ${n(td)} ${n(w0)} ${n(td + 1e-9)} ${n(w1)})`);
+            break;
+          case 'PULSE':
+            lines.push(`${e.id} ${a} ${b} PULSE(${n(w0)} ${n(w1)} ${n(td)} 1n 1n ${n(Number(p.pw ?? 0))} ${n(Number(p.per ?? 0) || 1e9)})`);
+            break;
+          case 'SINE_U':
+            lines.push(`${e.id} ${a} ${b} SIN(0 ${n(Number(p.amp))} ${n(Number(p.freq))} ${n(td)} 0 ${n(Number(p.phase ?? 0) + 360 * Number(p.freq) * td)})`);
+            break;
+          case 'PWL':
+            lines.push(`${e.id} ${a} ${b} PWL(${(p.pwl ?? []).map(([t, v]) => `${n(t)} ${n(v)}`).join(' ')})`);
+            break;
+          case 'EXP':
+          case 'RAMP':
+            lines.push(`${e.id} ${a} ${b} DC 0 ; ${p.mode === 'EXP' ? 'üstel' : 'rampa'} dalga biçimi SPICE'a aktarılmadı`);
+            break;
+          default:
+            lines.push(`${e.id} ${a} ${b} DC ${n(Number(p.value ?? 0))}`);
+        }
         break;
+      }
       case 'AM':
         lines.push(`V${e.id} ${a} ${b} DC 0 ; ampermetre`);
         break;

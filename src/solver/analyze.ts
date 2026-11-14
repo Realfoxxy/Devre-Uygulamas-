@@ -26,6 +26,8 @@ export function analyze(nl: Netlist, settings: AnalysisSettings): AnalyzeOutput 
   try {
     if (settings.type === 'dc') {
       if (hasAC) info.push('DC analizde AC kaynaklar 0 kabul edildi.');
+      if (nl.elements.some((e) => (e.type === 'V' || e.type === 'I') && e.params.mode && !['DC', 'AC'].includes(e.params.mode)))
+        info.push('DC analizde zamanla değişen kaynakların t < 0 değeri kullanıldı.');
       const result = solveDC(nl);
       postChecks(nl, result, issues, info);
       return { ok: true, result, issues, settings, info };
@@ -37,7 +39,7 @@ export function analyze(nl: Netlist, settings: AnalysisSettings): AnalyzeOutput 
         return fail();
       }
       if (nl.elements.some((e) => (e.type === 'V' || e.type === 'I') && e.params.mode !== 'AC'))
-        info.push('AC analizde DC kaynaklar sıfırlandı (gerilim kaynağı kısa, akım kaynağı açık devre).');
+        info.push('AC analiz yalnızca AC moddaki kaynakları görür; diğerleri sıfırlandı (gerilim kaynağı kısa, akım kaynağı açık devre).');
       if (!hasAC) info.push('Devrede AC kaynak yok; tüm fazörler 0.');
       const result = solveAC(nl, settings, freq);
       postChecks(nl, result, issues, info);

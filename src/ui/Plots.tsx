@@ -1,6 +1,7 @@
 // Alt grafik paneli: geçici rejimde v(t) ve i(t), AC taramada Bode grafikleri.
 import { Chart, ChartConfiguration } from 'chart.js';
-import { useEffect, useMemo, useRef } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { energyBetween } from '../core/energy';
 import { formatEng } from '../core/units';
 import { isStale, useStore } from '../state/store';
 import { bodeConfigs, transientConfigs } from './chartConfig';
@@ -8,15 +9,39 @@ import { stepIndex } from './values';
 
 type Cfg = ChartConfiguration<'line', { x: number; y: number }[]>;
 
-function LineChart({ cfg, onPickX, markerX }: { cfg: Cfg; onPickX?: (x: number) => void; markerX?: number | null }) {
+function LineChart({
+  cfg,
+  onPickX,
+  markerX,
+  band,
+}: {
+  cfg: Cfg;
+  onPickX?: (x: number) => void;
+  markerX?: number | null;
+  /** Enerji aralığı (taranır) */
+  band?: [number, number] | null;
+}) {
   const ref = useRef<HTMLCanvasElement>(null);
   const chart = useRef<Chart<'line', { x: number; y: number }[]> | null>(null);
   const marker = useRef<number | null | undefined>(markerX);
   marker.current = markerX;
+  const bandRef = useRef(band);
+  bandRef.current = band;
 
   useEffect(() => {
     const plugin = {
       id: 'tmarker',
+      beforeDatasetsDraw: (c: Chart) => {
+        const b = bandRef.current;
+        if (!b) return;
+        const x0 = c.scales.x.getPixelForValue(Math.min(...b));
+        const x1 = c.scales.x.getPixelForValue(Math.max(...b));
+        const { top, bottom } = c.chartArea;
+        c.ctx.save();
+        c.ctx.fillStyle = 'rgba(15,118,110,0.12)';
+        c.ctx.fillRect(x0, top, x1 - x0, bottom - top);
+        c.ctx.restore();
+      },
       afterDraw: (c: Chart) => {
         const x = marker.current;
         if (x === null || x === undefined) return;
@@ -51,7 +76,7 @@ function LineChart({ cfg, onPickX, markerX }: { cfg: Cfg; onPickX?: (x: number) 
 
   useEffect(() => {
     chart.current?.draw();
-  }, [markerX]);
+  }, [markerX, band]);
 
   return (
     <div className="chart-box">
@@ -60,8 +85,23 @@ function LineChart({ cfg, onPickX, markerX }: { cfg: Cfg; onPickX?: (x: number) 
   );
 }
 
+/** Düzensiz zaman ızgarasında en yakın nokta */
+function nearestIndex(t: ArrayLike<number>, x: number): number {
+  let lo = 0;
+  let hi = t.length - 1;
+  while (hi - lo > 1) {
+    const m = (lo + hi) >> 1;
+    if (t[m] < x) lo = m;
+    else hi = m;
+  }
+  return Math.abs(t[lo] - x) <= Math.abs(t[hi] - x) ? lo : hi;
+}
+
 export function Plots() {
   const s = useStore();
+  const [energyOn, setEnergyOn] = useState(false);
+  const [e1, setE1] = useState(0);
+  const [e2Raw, setE2] = useState<number | null>(null);
   const res = s.results;
   const sel = s.selection?.kind === 'comp' ? s.selection.id : null;
   const comps = s.doc.components.filter((c) => c.type !== 'GND');
@@ -84,6 +124,10 @@ export function Plots() {
     return null;
   }, [res, ids]);
 
+  const tr = res?.kind === 'transient' ? res : null;
+  const energyId = tr ? (ids[0] ?? null) : null;
+  const e2 = tr ? Math.min(e2Raw ?? tr.t.length - 1, tr.t.length - 1) : 0;
+
   let body: JSX.Element;
   if (!res) body = <p className="muted">Grafikler, geçici rejim ve AC frekans taraması analizlerinden sonra burada görünür.</p>;
   else if (res.kind === 'dc') body = <p className="muted">DC analizde grafik yok. Geçici rejim ya da AC tarama seçin.</p>;
@@ -91,24 +135,17 @@ export function Plots() {
     body = <p className="muted">Bode grafiği için analiz ayarlarından “Frekans taraması”nı açın.</p>;
   else if (!cfgs) body = <p className="muted">Grafiğini görmek istediğiniz bileşeni seçin ya da aşağıdan ekleyin.</p>;
   else {
-    const tr = res.kind === 'transient' ? res : null;
     const k = tr ? stepIndex(tr, s.tIndex) : null;
-    const pick = tr
-      ? (x: number) => {
-          const kk = Math.round(x / tr.h);
-          s.setTIndex(Math.max(0, Math.min(tr.t.length - 1, kk)));
-        }
-      : undefined;
+    const pick = tr ? (x: number) => s.setTIndex(nearestIndex(tr.t, x)) : undefined;
     body = (
       <div className="charts">
         {cfgs.map((c, i) => (
-          <LineChart key={i} cfg={c} onPickX={pick} markerX={tr && k !== null ? tr.t[k] : null} />
+          <LineChart key={i} cfg={c} onPickX={pick} markerX={tr && k !== null ? tr.t[k] : null} band={tr && energyOn ? [tr.t[e1], tr.t[e2]] : null} />
         ))}
       </div>
     );
   }
 
-  const tr = res?.kind === 'transient' ? res : null;
   return (
     <div className={`plots ${isStale(s) ? 'stale' : ''}`}>
       <div className="plots-head">
@@ -141,6 +178,31 @@ export function Plots() {
         )}
       </div>
       {tr && <p className="muted small">Grafikte bir zamana tıklayın: tüm etiket ve panel değerleri o ana güncellenir.</p>}
+      {tr && energyId && (
+        <div className="energy">
+          <label className="check">
+            <input type="checkbox" checked={energyOn} onChange={(e) => setEnergyOn(e.target.checked)} />
+            Enerji (w = ∫p dt) — {energyId}
+          </label>
+          {energyOn && (
+            <>
+              <label>
+                t₁ <input type="range" min={0} max={tr.t.length - 1} value={e1} onChange={(e) => setE1(Number(e.target.value))} aria-label="t1" /> {formatEng(tr.t[e1], 's')}
+              </label>
+              <label>
+                t₂ <input type="range" min={0} max={tr.t.length - 1} value={e2} onChange={(e) => setE2(Number(e.target.value))} aria-label="t2" /> {formatEng(tr.t[e2], 's')}
+              </label>
+              <b>
+                {(() => {
+                  const c = tr.comps[energyId];
+                  const w = energyBetween(tr.t, c.V, c.I, tr.t[e1], tr.t[e2]);
+                  return `bu aralıkta ${formatEng(Math.abs(w), 'J')} ${Math.abs(w) < 1e-15 ? '' : w > 0 ? 'soğurdu' : 'verdi'}`;
+                })()}
+              </b>
+            </>
+          )}
+        </div>
+      )}
       {body}
     </div>
   );

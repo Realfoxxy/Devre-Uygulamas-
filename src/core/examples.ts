@@ -58,6 +58,28 @@ export const EXAMPLES: { name: string; doc: CircuitDoc }[] = [
     },
   },
   {
+    name: 'Kare dalga girişli RC (darbe)',
+    doc: {
+      ...base('Kare Dalga Girişli RC Devresi'),
+      components: [
+        { id: 'V1', type: 'V', x: 6, y: 8, rot: 90, params: { mode: 'PULSE', value: 0, w0: 0, w1: 5, td: 0, pw: 2e-3, per: 4e-3, amp: 5, freq: 1000, phase: 0 } },
+        { id: 'R1', type: 'R', x: 12, y: 4, rot: 0, params: { value: 1000 } },
+        { id: 'C1', type: 'C', x: 16, y: 8, rot: 90, params: { value: 1e-6, v0: 0 } },
+        { id: 'GND1', type: 'GND', x: 6, y: 12, rot: 0, params: {} },
+      ],
+      wires: [
+        { id: 'w1', from: [6, 6], to: [6, 4] },
+        { id: 'w2', from: [6, 4], to: [10, 4] },
+        { id: 'w3', from: [14, 4], to: [16, 4] },
+        { id: 'w4', from: [16, 4], to: [16, 6] },
+        { id: 'w5', from: [6, 10], to: [6, 12] },
+        { id: 'w6', from: [6, 12], to: [16, 12] },
+        { id: 'w7', from: [16, 12], to: [16, 10] },
+      ],
+      analysis: { ...DEFAULT_ANALYSIS, type: 'transient', tStop: 12e-3 },
+    },
+  },
+  {
     name: 'RC alçak geçiren filtre (AC + Bode)',
     doc: {
       ...base('RC Alçak Geçiren Filtre'),

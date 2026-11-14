@@ -9,6 +9,7 @@ import { isStale, useStore } from '../state/store';
 import { SolutionView } from './SolutionView';
 import { DependentFields } from './DependentFields';
 import { ExtraFields } from './ExtraFields';
+import { SourceFields } from './SourceFields';
 import { TheoremPanel } from './TheoremCard';
 import { KclPanel, KvlPanel, SeriesParallelPanel } from './KirchhoffPanels';
 import { ValueInput } from './ValueInput';
@@ -83,44 +84,6 @@ function ParamEditor({ comp }: { comp: Component }) {
         </label>,
       );
   }
-  if (comp.type === 'V' || comp.type === 'I') {
-    const u = def.unit;
-    rows.push(
-      <label key="mode">
-        <span>Tür</span>
-        <span className="seg">
-          {(['DC', 'AC'] as const).map((m) => (
-            <button key={m} className={p.mode === m ? 'on' : ''} onClick={() => update(comp.id, { mode: m })}>
-              {m === 'DC' ? 'DC' : 'AC (sinüs)'}
-            </button>
-          ))}
-        </span>
-      </label>,
-    );
-    if (p.mode === 'AC') {
-      rows.push(
-        <label key="amp">
-          <span>Genlik (tepe)</span>
-          <ValueInput value={p.amp} unit={u} onCommit={set('amp')} autoFocusEvent />
-        </label>,
-        <label key="f">
-          <span>Frekans</span>
-          <ValueInput value={p.freq} unit="Hz" onCommit={set('freq')} positive />
-        </label>,
-        <label key="ph">
-          <span>Faz</span>
-          <ValueInput value={p.phase ?? 0} unit="°" onCommit={set('phase')} />
-        </label>,
-      );
-    } else
-      rows.push(
-        <label key="v">
-          <span>Değer</span>
-          <ValueInput value={p.value} unit={u} onCommit={set('value')} autoFocusEvent />
-        </label>,
-      );
-  }
-
   return (
     <div className="editor">
       <div className="editor-head">
@@ -145,15 +108,10 @@ function ParamEditor({ comp }: { comp: Component }) {
       <p className="muted small">{def.help}</p>
       <div className="fields">
         {rows}
+        <SourceFields comp={comp} />
         <DependentFields comp={comp} />
         <ExtraFields comp={comp} />
       </div>
-      {(comp.type === 'V' || comp.type === 'I') && p.mode === 'AC' && (
-        <p className="muted small">
-          {comp.type === 'V' ? 'v' : 'i'}(t) = {formatEng(p.amp ?? 0, def.unit)} · sin(2π·{formatEng(p.freq ?? 0, 'Hz')}·t
-          {p.phase ? ` + ${p.phase}°` : ''})
-        </p>
-      )}
       <div className="row-btns">
         <button className="btn" onClick={rotate} title="Döndür (R)">⟳ Döndür</button>
         <button className="btn danger" onClick={del} title="Sil (Delete)">Sil</button>

@@ -2,6 +2,7 @@
 import { PARTS, isDependent } from '../core/circuit';
 import { DependentFields } from './DependentFields';
 import { ExtraFields } from './ExtraFields';
+import { SourceFields } from './SourceFields';
 import { describeValue } from '../core/netlist';
 import { useStore } from '../state/store';
 import { ValueInput } from './ValueInput';
@@ -34,13 +35,6 @@ export function MobileBar({ onDetails }: { onDetails: () => void }) {
   let field: JSX.Element | null = null;
   if (comp.type === 'R' || comp.type === 'C' || comp.type === 'L') {
     field = <ValueInput key={comp.id} value={p.value} unit={def.unit} positive onCommit={(v) => update(comp.id, { value: v ?? 0 })} />;
-  } else if (comp.type === 'V' || comp.type === 'I') {
-    field =
-      p.mode === 'AC' ? (
-        <ValueInput key={comp.id + 'ac'} value={p.amp} unit={`${def.unit} tepe`} onCommit={(v) => update(comp.id, { amp: v ?? 0 })} />
-      ) : (
-        <ValueInput key={comp.id + 'dc'} value={p.value} unit={def.unit} onCommit={(v) => update(comp.id, { value: v ?? 0 })} />
-      );
   }
   return (
     <div className="mobile-bar" role="region" aria-label={`${comp.id} düzenle`}>
@@ -50,6 +44,11 @@ export function MobileBar({ onDetails }: { onDetails: () => void }) {
         <span className="muted small mb-desc">{comp.type === 'GND' ? '' : describeValue(comp.type, p)}</span>
         <button className="icon-btn" aria-label="Seçimi kaldır" onClick={() => select(null)}>✕</button>
       </div>
+      {(comp.type === 'V' || comp.type === 'I') && (
+        <div className="mb-dep fields">
+          <SourceFields comp={comp} compact />
+        </div>
+      )}
       {['OA', 'POT', 'TS', 'SW2', 'VM', 'AM'].includes(comp.type) && (
         <div className="mb-dep fields">
           <ExtraFields comp={comp} compact />
