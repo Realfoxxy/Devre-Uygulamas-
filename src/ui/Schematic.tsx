@@ -208,7 +208,7 @@ export function Schematic(p: SchematicProps) {
   );
 }
 
-interface Box {
+export interface Box {
   x: number;
   y: number;
   w: number;
@@ -287,6 +287,37 @@ export function placeNodeLabels(components: Component[], wires: Wire[], nl: Netl
     out.push({ node: k, text: t, x: b.box.x, y: b.box.y, w });
   }
   return out;
+}
+
+/**
+ * Bir çerçevenin (ör. süperdüğüm) adı için yer seçer: çerçevenin dört köşesinin dışından,
+ * bileşen ve düğüm etiketleriyle en az çakışanı. Dönen x, y metnin sol-üst köşesidir (piksel).
+ */
+export function placeFrameTag(
+  components: Component[],
+  frame: Box,
+  w: number,
+  h: number,
+  extra: Box[] = [],
+): { x: number; y: number } {
+  const obs = [...obstacles(components), ...extra];
+  const { x, y, w: fw, h: fh } = frame;
+  const cands: [number, number, number][] = [
+    [x + 6, y - h - 3, 0],
+    [x + fw - w - 6, y - h - 3, 0.2],
+    [x + 6, y + fh + 3, 0.4],
+    [x + fw - w - 6, y + fh + 3, 0.6],
+    [x - w - 4, y + fh / 2 - h / 2, 0.8],
+    [x + fw + 4, y + fh / 2 - h / 2, 0.8],
+  ];
+  let best = { x: cands[0][0], y: cands[0][1], score: Infinity };
+  for (const [cx, cy, pen] of cands) {
+    const box = { x: cx, y: cy, w, h };
+    let score = pen;
+    for (const o of obs) score += overlap(box, o);
+    if (score < best.score) best = { x: cx, y: cy, score };
+  }
+  return best;
 }
 
 /** Şemanın sınır kutusu (piksel) */
