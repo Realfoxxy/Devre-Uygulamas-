@@ -1,5 +1,7 @@
 // Op-amp, potansiyometre, sıcaklık sensörü, iki yollu anahtar ve ölçü aletlerinin ayarları.
+import { useEffect, useState } from 'react';
 import { Component } from '../core/circuit';
+import { formatInput, parseValue } from '../core/units';
 import { useStore } from '../state/store';
 import { ValueInput } from './ValueInput';
 
@@ -12,6 +14,41 @@ function Seg<T extends string>({ value, options, onChange }: { value: T; options
         </button>
       ))}
     </span>
+  );
+}
+
+/** Anahtarın konum değiştirdiği anlar: "0, 1m, 3m" */
+function TimesInput({ comp }: { comp: Component }) {
+  const update = useStore((s) => s.updateParams);
+  const times = comp.params.times ?? [];
+  const [text, setText] = useState(times.map(formatInput).join(', '));
+  const [bad, setBad] = useState(false);
+  useEffect(() => setText((comp.params.times ?? []).map(formatInput).join(', ')), [comp.id, comp.params.times]);
+  const commit = () => {
+    const parts = text.split(/[,;\s]+/).filter(Boolean);
+    const vals = parts.map((x) => parseValue(x));
+    if (vals.some((v) => v === null)) return setBad(true);
+    setBad(false);
+    update(comp.id, { times: (vals as number[]).sort((a, b) => a - b).slice(0, 50) });
+  };
+  return (
+    <label>
+      <span>Konum değiştirdiği anlar</span>
+      <span className={`value-input ${bad ? 'bad' : ''}`}>
+        <input
+          value={text}
+          placeholder="ör. 0, 1m"
+          onChange={(e) => setText(e.target.value)}
+          onBlur={commit}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') (e.target as HTMLInputElement).blur();
+            e.stopPropagation();
+          }}
+          aria-label="Anahtarlama anları"
+        />
+        <span className="unit">s</span>
+      </span>
+    </label>
   );
 }
 
@@ -134,10 +171,23 @@ export function ExtraFields({ comp, compact }: { comp: Component; compact?: bool
       );
     case 'SW2':
       return (
-        <label>
-          <span>Ortak uç</span>
-          <Seg value={p.way ?? 'A'} options={[['A', 'A konumunda'], ['B', 'B konumunda']]} onChange={(w) => update(comp.id, { way: w })} />
-        </label>
+        <>
+          <label>
+            <span>t &lt; 0'da ortak uç</span>
+            <Seg value={p.way ?? 'A'} options={[['A', 'A'], ['B', 'B']]} onChange={(w) => update(comp.id, { way: w })} />
+          </label>
+          <TimesInput comp={comp} />
+        </>
+      );
+    case 'SW':
+      return (
+        <>
+          <label>
+            <span>t &lt; 0 konumu</span>
+            <Seg value={p.sw0 ?? 'open'} options={[['open', 'Açık'], ['closed', 'Kapalı']]} onChange={(w) => update(comp.id, { sw0: w })} />
+          </label>
+          <TimesInput comp={comp} />
+        </>
       );
     case 'VM':
     case 'AM':

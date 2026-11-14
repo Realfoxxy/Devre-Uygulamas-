@@ -1,6 +1,6 @@
 // Bileşen ve kablo veri modeli. Koordinatlar ızgara birimindedir.
 
-export type CompType = 'R' | 'C' | 'L' | 'V' | 'I' | 'GND' | 'VM' | 'AM' | 'E' | 'F' | 'G' | 'H' | 'OA' | 'POT' | 'TS' | 'SW2';
+export type CompType = 'R' | 'C' | 'L' | 'V' | 'I' | 'GND' | 'VM' | 'AM' | 'E' | 'F' | 'G' | 'H' | 'OA' | 'POT' | 'TS' | 'SW' | 'SW2';
 
 /** Bağımlı kaynaklar: E (VCVS), H (CCVS), G (VCCS), F (CCCS) */
 export const DEPENDENT: CompType[] = ['E', 'F', 'G', 'H'];
@@ -60,8 +60,14 @@ export interface Params {
   /** Ölçü aleti: gerçek model (iç direnç) */
   real?: boolean;
   rMeter?: number;
-  /** İki yollu anahtar: ortak uç hangi konumda */
+  /** İki yollu anahtar: ortak uç t < 0'da hangi konumda */
   way?: 'A' | 'B';
+  /** Tek yollu anahtar: t < 0 konumu */
+  sw0?: 'open' | 'closed';
+  /** Anahtarın konum değiştirdiği anlar (s) */
+  times?: number[];
+  /** Kapasitör / bobin başlangıç koşulu: otomatik (t < 0 DC çözümünden) ya da elle */
+  init?: 'auto' | 'manual';
 }
 
 export type SourceMode = 'DC' | 'AC' | 'STEP' | 'PULSE' | 'EXP' | 'RAMP' | 'SINE_U' | 'PWL';
@@ -302,6 +308,18 @@ export const PARTS: Record<CompType, PartDef> = {
     unit: 'A',
     help: 'Mutlak sıcaklıkla orantılı akım kaynağı: I = k·T (T kelvin); ok yönünde akar',
   },
+  SW: {
+    type: 'SW',
+    group: 'Anahtarlar',
+    name: 'Anahtar',
+    short: 'Anahtar',
+    prefix: 'SW',
+    pins: TWO_PIN,
+    defaultRot: 0,
+    defaultParams: { sw0: 'open', times: [0] },
+    unit: '',
+    help: 'Tek yollu anahtar: t < 0 konumu ve konum değiştirdiği anlar (kapalı 1 mΩ, açık 1 TΩ)',
+  },
   SW2: {
     type: 'SW2',
     group: 'Anahtarlar',
@@ -315,9 +333,9 @@ export const PARTS: Record<CompType, PartDef> = {
     ],
     pinNames: ['ortak', 'A', 'B'],
     defaultRot: 0,
-    defaultParams: { way: 'A' },
+    defaultParams: { way: 'A', times: [] },
     unit: '',
-    help: 'Ortak uç A ya da B konumuna bağlanır (kapalı 1 mΩ, açık 1 TΩ)',
+    help: 'Ortak uç A ya da B konumuna bağlanır; konum değiştirdiği anlar girilebilir (kapalı 1 mΩ, açık 1 TΩ)',
   },
   E: {
     type: 'E',
@@ -369,7 +387,9 @@ export const PARTS: Record<CompType, PartDef> = {
   },
 };
 
-export const PALETTE_ORDER: CompType[] = ['R', 'C', 'L', 'V', 'I', 'GND', 'E', 'H', 'G', 'F', 'OA', 'POT', 'TS', 'SW2', 'VM', 'AM'];
+export const PALETTE_ORDER: CompType[] = ['R', 'C', 'L', 'V', 'I', 'GND', 'E', 'H', 'G', 'F', 'OA', 'POT', 'TS', 'SW', 'SW2', 'VM', 'AM'];
+
+export const isSwitch = (t: CompType) => t === 'SW' || t === 'SW2';
 
 /** Üç uçlu elemanlar */
 export const isMultiPin = (t: CompType) => t === 'OA' || t === 'POT' || t === 'SW2';

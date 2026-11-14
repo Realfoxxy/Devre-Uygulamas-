@@ -48,6 +48,9 @@ function expandForNodal(nl: Netlist): Netlist | string {
       out.push({ id: `${e.id}alt`, type: 'R', nodes: [e.nodes[2], e.nodes[1]], params: { value: Math.max(1e-3, a * Rp) } });
     } else if (e.type === 'TS') {
       out.push({ ...e, type: 'I', params: { mode: 'DC', value: Number(p.kT ?? 1e-6) * (Number(p.tempC ?? 25) + 273.15) } });
+    } else if (e.type === 'SW') {
+      // t < 0 konumu: kapalıysa kısa devre, açıksa yok
+      if ((p.sw0 ?? 'open') === 'closed' && (p.times ?? []).filter((t) => t < 0).length % 2 === 0) out.push({ id: e.id, type: 'AM', nodes: e.nodes, params: {} });
     } else if (e.type === 'SW2') {
       const to = (p.way ?? 'A') === 'A' ? e.nodes[1] : e.nodes[2];
       out.push({ id: e.id, type: 'AM', nodes: [e.nodes[0], to], params: {} });

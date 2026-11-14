@@ -8,6 +8,7 @@ import { SingularMatrixError } from './lu';
 import { solveTransient } from './transient';
 import { validateControls, validateTopology } from './validate';
 import { isDependent } from '../core/circuit';
+import { firstOrderAnalysis } from './methods/firstOrder';
 import type { AnalysisResult } from '../core/results';
 import { abs } from '../core/complex';
 import { formatEng } from '../core/units';
@@ -48,6 +49,17 @@ export function analyze(nl: Netlist, settings: AnalysisSettings): AnalyzeOutput 
     const { result, info: tinfo } = solveTransient(nl, settings);
     info.push(...tinfo);
     postChecks(nl, result, issues, info);
+    try {
+      const fo = firstOrderAnalysis(nl, result);
+      if (fo.applicable) {
+        result.firstOrder = fo;
+        for (const w of fo.warnings) issues.push({ level: 'warning', message: w, compIds: fo.elem ? [fo.elem] : [] });
+        if (fo.unstable) issues.push({ level: 'warning', message: 'Bu devre kararsız: R_th negatif. Doğal yanıt büyüyor (Bölüm 8.5).', compIds: fo.elem ? [fo.elem] : [] });
+      }
+    } catch {
+      /* birinci derece analiz isteğe bağlı */
+    }
+    opampCircuits(nl, result, issues, info);
     return { ok: true, result, issues, settings, info };
   } catch (err) {
     if (err instanceof SingularMatrixError) {
@@ -168,6 +180,35 @@ function postChecks(nl: Netlist, res: AnalysisResult, issues: Issue[], info: str
       for (const m of meters) res.idealMeters[m.id] = m.type === 'VM' ? ideal.comps[m.id].V : ideal.comps[m.id].I;
     } catch {
       /* yok say */
+    }
+  }
+}
+
+/** Op-amp ile integral / türev alıcı tanıma (Bölüm 7.9) */
+function opampCircuits(nl: Netlist, res: AnalysisResult, issues: Issue[], info: string[]) {
+  if (res.kind !== 'transient') return;
+  for (const oa of nl.elements.filter((e) => e.type === 'OA')) {
+    const [, n, o] = oa.nodes;
+    const between = (x: number, y: number) => nl.elements.filter((e) => e.nodes.length === 2 && ((e.nodes[0] === x && e.nodes[1] === y) || (e.nodes[0] === y && e.nodes[1] === x)));
+    const fb = between(n, o);
+    const inputs = nl.elements.filter((e) => e.nodes.length === 2 && e.nodes.includes(n) && !e.nodes.includes(o) && e.id !== oa.id);
+    const fbC = fb.find((e) => e.type === 'C');
+    const fbR = fb.find((e) => e.type === 'R');
+    const inR = inputs.find((e) => e.type === 'R');
+    const inC = inputs.find((e) => e.type === 'C');
+    if (fbC && !fbR && inR) {
+      const RC = Number(inR.params.value) * Number(fbC.params.value);
+      info.push(`${oa.id} integral alıcı: v_çıkış = −(1/RC)∫v_giriş dt, RC = ${formatEng(Number(inR.params.value), 'Ω')} · ${formatEng(Number(fbC.params.value), 'F')} = ${formatEng(RC, 's')}.`);
+    } else if (fbR && !fbC && inC) {
+      const RC = Number(fbR.params.value) * Number(inC.params.value);
+      info.push(`${oa.id} türev alıcı: v_çıkış = −RC·dv_giriş/dt, RC = ${formatEng(RC, 's')}.`);
+      const edgy = nl.elements.some((e) => (e.type === 'V' || e.type === 'I') && (e.params.mode === 'STEP' || e.params.mode === 'PULSE'));
+      if (edgy)
+        issues.push({
+          level: 'warning',
+          message: `${oa.id}: türev alıcıya basamak / darbe girişi verildi; çıkış kenar anında ideal olarak dürtüdür (sonsuz). Gerçek op-amp orada doyuma girer.`,
+          compIds: [oa.id],
+        });
     }
   }
 }

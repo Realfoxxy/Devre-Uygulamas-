@@ -57,6 +57,12 @@ export function compDisplay(
     if ((params?.model ?? 'ideal') !== 'finite')
       d.rows.push({ label: 'İdeal op-amp', value: 'v₊ = v₋ (sanal kısa devre), i₊ = i₋ = 0' });
   }
+  if ((type === 'C' || type === 'L') && params?.value && res.kind !== 'ac') {
+    const vi = compVI(res, id, tIndex)!;
+    const val = Number(params.value);
+    const w = type === 'C' ? 0.5 * val * vi.V.re ** 2 : 0.5 * val * vi.I.re ** 2;
+    d.rows.push({ label: 'Depolanan enerji', value: formatEng(w, 'J'), hint: type === 'C' ? '½Cv²' : '½Li²' });
+  }
   if (type === 'POT' && pv) d.rows.push({ label: 'Orta uç gerilimi', value: vt(pv[2], 'V'), hint: 'toprağa göre' });
   if (type === 'SW2' && params) d.rows.push({ label: 'Konum', value: `ortak uç → ${params.way ?? 'A'}` });
   if ((type === 'VM' || type === 'AM') && res.kind === 'dc' && res.idealMeters?.[id] !== undefined) {

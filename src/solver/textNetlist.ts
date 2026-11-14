@@ -35,7 +35,11 @@ export function parseNetlistText(text: string): Netlist {
       params.kT = parseValue(rest[0] ?? '1u') ?? 1e-6;
       params.tempC = parseValue(rest[1] ?? '25') ?? 25;
     } else if (type === 'SW2') {
-      params.way = (rest[0]?.toUpperCase() === 'B' ? 'B' : 'A');
+      params.way = rest[0]?.toUpperCase() === 'B' ? 'B' : 'A';
+      params.times = (rest[1] ?? '').split(',').filter(Boolean).map((x) => parseValue(x) ?? 0);
+    } else if ((type as string) === 'SW') {
+      params.sw0 = /^(closed|kapal)/i.test(rest[0] ?? '') ? 'closed' : 'open';
+      params.times = (rest[1] ?? '0').split(',').filter(Boolean).map((x) => parseValue(x) ?? 0);
     } else if ((type === 'VM' || type === 'AM') && kv('R')) {
       params.real = true;
       params.rMeter = parseValue(kv('R')!) ?? 1;
@@ -55,6 +59,8 @@ export function parseNetlistText(text: string): Netlist {
       if (rest[1]) params.ctrl = { ref: rest[1], kind: type === 'E' || type === 'G' ? 'V' : 'I' };
     } else if (type === 'R' || type === 'C' || type === 'L') {
       params.value = parseValue(rest[0]) ?? 0;
+      if (rest.some((r) => /^MAN/i.test(r))) params.init = 'manual';
+      if (rest.some((r) => /^AUTO/i.test(r))) params.init = 'auto';
       const ic = rest.find((r) => /^IC=/i.test(r));
       if (ic) {
         const v = parseValue(ic.slice(3)) ?? 0;

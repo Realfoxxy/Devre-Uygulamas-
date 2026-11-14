@@ -54,6 +54,9 @@ function cleanParams(type: CompType, raw: unknown): Params {
   if (typeof r.mode === 'string' && MODE_VALUES.includes(r.mode)) out.mode = r.mode as Params['mode'];
   if (r.model === 'ideal' || r.model === 'finite' || r.model === 'offset') out.model = r.model;
   if (r.way === 'A' || r.way === 'B') out.way = r.way;
+  if (r.sw0 === 'open' || r.sw0 === 'closed') out.sw0 = r.sw0;
+  if (r.init === 'auto' || r.init === 'manual') out.init = r.init;
+  if (Array.isArray(r.times)) out.times = (r.times as unknown[]).filter(finite).slice(0, 50).sort((a, b) => a - b);
   if (Array.isArray(r.pwl)) {
     const pts = (r.pwl as unknown[])
       .slice(0, 200)

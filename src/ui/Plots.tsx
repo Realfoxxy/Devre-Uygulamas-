@@ -14,13 +14,18 @@ function LineChart({
   onPickX,
   markerX,
   band,
+  vlines,
 }: {
   cfg: Cfg;
   onPickX?: (x: number) => void;
   markerX?: number | null;
   /** Enerji aralığı (taranır) */
   band?: [number, number] | null;
+  /** Dikey işaret çizgileri (τ, 3τ, 5τ) */
+  vlines?: { x: number; label: string }[];
 }) {
+  const vRef = useRef(vlines);
+  vRef.current = vlines;
   const ref = useRef<HTMLCanvasElement>(null);
   const chart = useRef<Chart<'line', { x: number; y: number }[]> | null>(null);
   const marker = useRef<number | null | undefined>(markerX);
@@ -43,10 +48,25 @@ function LineChart({
         c.ctx.restore();
       },
       afterDraw: (c: Chart) => {
+        const { top, bottom } = c.chartArea;
+        for (const v of vRef.current ?? []) {
+          const px = c.scales.x.getPixelForValue(v.x);
+          if (px < c.chartArea.left || px > c.chartArea.right) continue;
+          c.ctx.save();
+          c.ctx.strokeStyle = '#7c3aed';
+          c.ctx.setLineDash([2, 3]);
+          c.ctx.beginPath();
+          c.ctx.moveTo(px, top);
+          c.ctx.lineTo(px, bottom);
+          c.ctx.stroke();
+          c.ctx.fillStyle = '#7c3aed';
+          c.ctx.font = '10px sans-serif';
+          c.ctx.fillText(v.label, px + 3, top + 10);
+          c.ctx.restore();
+        }
         const x = marker.current;
         if (x === null || x === undefined) return;
         const sx = c.scales.x.getPixelForValue(x);
-        const { top, bottom } = c.chartArea;
         const ctx = c.ctx;
         ctx.save();
         ctx.strokeStyle = '#d92d20';
@@ -127,6 +147,8 @@ export function Plots() {
   const tr = res?.kind === 'transient' ? res : null;
   const energyId = tr ? (ids[0] ?? null) : null;
   const e2 = tr ? Math.min(e2Raw ?? tr.t.length - 1, tr.t.length - 1) : 0;
+  const iv0 = tr?.firstOrder?.intervals.find((iv) => iv.tau);
+  const tauLines = iv0?.tau ? [1, 3, 5].map((k) => ({ x: iv0.t0 + k * iv0.tau!, label: `${k === 1 ? '' : k}τ` })) : undefined;
 
   let body: JSX.Element;
   if (!res) body = <p className="muted">Grafikler, geçici rejim ve AC frekans taraması analizlerinden sonra burada görünür.</p>;
@@ -140,7 +162,7 @@ export function Plots() {
     body = (
       <div className="charts">
         {cfgs.map((c, i) => (
-          <LineChart key={i} cfg={c} onPickX={pick} markerX={tr && k !== null ? tr.t[k] : null} band={tr && energyOn ? [tr.t[e1], tr.t[e2]] : null} />
+          <LineChart key={i} cfg={c} onPickX={pick} markerX={tr && k !== null ? tr.t[k] : null} band={tr && energyOn ? [tr.t[e1], tr.t[e2]] : null} vlines={tauLines} />
         ))}
       </div>
     );
