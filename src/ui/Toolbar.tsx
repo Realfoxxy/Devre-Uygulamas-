@@ -157,6 +157,67 @@ function AnalysisSettingsPop() {
   );
 }
 
+function TheoremsMenu() {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+  useOutside(ref, open, () => setOpen(false));
+  const s = useStore();
+  const sel = s.selection?.kind === 'comp' ? s.doc.components.find((c) => c.id === s.selection!.id) : undefined;
+  const need = (msg: string) => {
+    s.showToast(msg);
+    setOpen(false);
+  };
+  const go = (f: () => void) => () => {
+    setOpen(false);
+    f();
+    window.dispatchEvent(new CustomEvent('devre:open-panel'));
+  };
+  return (
+    <div className="menu" ref={ref}>
+      <button className="btn ghost" onClick={() => setOpen(!open)} aria-haspopup="menu">
+        Teoremler ▾
+      </button>
+      {open && (
+        <div className="menu-pop" role="menu">
+          <button
+            onClick={() =>
+              sel && (sel.type === 'V' || sel.type === 'I')
+                ? go(() => s.setTheorem({ tool: 'transform', source: sel.id }))()
+                : need('Önce bir gerilim ya da akım kaynağı seçin.')
+            }
+          >
+            Kaynak dönüşümü
+          </button>
+          <button
+            onClick={() => (sel && sel.type !== 'GND' ? go(() => s.setTheorem({ tool: 'super', target: sel.id }))() : need('Önce sonucunu görmek istediğiniz bileşeni seçin.'))}
+          >
+            Süperpozisyon
+          </button>
+          <button
+            onClick={() => {
+              setOpen(false);
+              s.setTheorem(null);
+              s.setPickNodes({ tool: 'thevenin', a: null });
+            }}
+          >
+            Thevenin / Norton (iki nokta seç)
+          </button>
+          <button
+            onClick={() => {
+              setOpen(false);
+              s.setTheorem(null);
+              s.setPickNodes({ tool: 'req', a: null });
+            }}
+          >
+            Eşdeğer direnç (iki nokta seç)
+          </button>
+          <div className="menu-sep">Maksimum güç: Thevenin kartından açılır</div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 export function Toolbar({ onExport, onTogglePalette, onTogglePanel }: { onExport: () => void; onTogglePalette: () => void; onTogglePanel: () => void }) {
   const s = useStore();
   const types: { v: AnalysisType; l: string }[] = [
@@ -175,6 +236,7 @@ export function Toolbar({ onExport, onTogglePalette, onTogglePanel }: { onExport
         <span className="brand-name">Devre Lab</span>
       </div>
       <FileMenu />
+      <TheoremsMenu />
       <div className="tb-group hide-narrow">
         <button className="icon-btn" title="Geri al (Ctrl+Z)" disabled={!s.past.length} onClick={s.undo}>↶</button>
         <button className="icon-btn" title="Yinele (Ctrl+Y)" disabled={!s.future.length} onClick={s.redo}>↷</button>

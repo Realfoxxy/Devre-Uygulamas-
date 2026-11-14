@@ -23,6 +23,8 @@ export interface SchematicProps {
   errorIds?: Set<string>;
   selectedComp?: string | null;
   selectedWire?: string | null;
+  /** Soluk çizilen bileşenler (süperpozisyonda sıfırlanan kaynaklar) */
+  dimmedIds?: Set<string>;
   /** Vurgulanan bileşenler (KGY çevresi) */
   highlightIds?: Set<string>;
   /** Çoklu seçim */
@@ -131,7 +133,7 @@ export function Schematic(p: SchematicProps) {
           else if (d) extra = `I = ${d.currentText}`;
         }
         return (
-          <g key={c.id} data-comp={interactive ? c.id : undefined} className={interactive ? 'comp' : undefined}>
+          <g key={c.id} data-comp={interactive ? c.id : undefined} className={interactive ? 'comp' : undefined} opacity={p.dimmedIds?.has(c.id) ? 0.25 : undefined}>
             {interactive && (
               <g transform={`translate(${c.x * G} ${c.y * G}) rotate(${c.rot})`}>
                 {c.type === 'GND' ? (

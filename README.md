@@ -18,6 +18,9 @@ Hiçbir veri sunucuya gitmez.
 - **Analiz yöntemleri (Bölüm 3–4):** kabloya dokununca KAY tablosu, bileşende KGY çevresi; çoklu seçimde seri/paralel eşdeğer,
   gerilim ve akım bölücü formülleri; öğrencinin yazacağı biçimde düğüm denklemleri (süperdüğüm dahil) ve çevre denklemleri
   (süperçevre dahil, çizimde ↻ oklar); MATLAB, Python (NumPy), LaTeX ve SPICE (.cir) olarak kopyalama.
+- **Teoremler (Bölüm 5):** kaynak dönüşümü (devrede uygulanır, öncesi/sonrası tablosu), süperpozisyon tablosu (güç
+  toplanmaz notu), iki noktaya dokunarak Thevenin / Norton (R_th = 0, ∞ ve negatif durumları), eşdeğer direnç, maksimum güç
+  (DC'de R_L taraması, AC'de Z_L = Z_th*).
 - **Lab:** ölçülen V / I değerini girince yüzde hata; **Çözümü göster** modunda netlist ve MNA matrisi
   (seçili bileşenin damgası renkli).
 - **Rapor:** başlık bloğu, vektör devre şeması, analiz ayarları, sonuç tablosu (ölçülen + % hata),
