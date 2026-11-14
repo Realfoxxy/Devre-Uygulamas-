@@ -249,6 +249,19 @@ kbd {
 .clickable:hover { background: #f7f9fd; }
 
 /* Çözüm görünümü */
+.sub-tabs { margin-bottom: 10px; flex-wrap: wrap; }
+.sub-tabs button { font-size: 12.5px; }
+.methods .compare { margin: 0 0 6px; font-size: 13px; }
+.eqs { display: flex; flex-direction: column; gap: 8px; }
+.eq-block { display: flex; flex-direction: column; gap: 2px; }
+.eq-title { font-size: 11.5px; font-weight: 700; color: var(--muted); }
+.eq { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: clamp(12px, 2.4cqi, 15px); background: #f7f8fb; border: 1px solid var(--line); border-radius: 6px; padding: 5px 8px; overflow-x: auto; white-space: nowrap; }
+.eq.simp { background: #fff; color: #2149b8; }
+p.eq { margin: 0; white-space: normal; }
+.copy-row { display: flex; flex-wrap: wrap; gap: 6px; margin: 8px 0; }
+.small-btn { font-size: 12px; padding: 4px 9px; }
+.kcl, .kvl, .sp { display: flex; flex-direction: column; gap: 6px; margin-top: 8px; }
+.kvl .btn { align-self: flex-start; }
 .solution h4 { margin: 6px 0; font-size: 13px; }
 .netlist { background: #f7f8fb; border: 1px solid var(--line); border-radius: 6px; padding: 8px 10px; font-size: clamp(12px, 2.4cqi, 16px); margin: 0; overflow-x: auto; }
 .matrix-wrap { overflow-x: auto; border: 1px solid var(--line); border-radius: 6px; }

@@ -15,6 +15,9 @@ Hiçbir veri sunucuya gitmez.
 - **Ölçüm:** bileşene tıklayınca gerilim, akım, güç (AC'de genlik ∠ faz, etkin değer, empedans; geçici rejimde
   seçilen andaki değer ve τ). Devre üzerinde düğüm gerilimi etiketleri ve seçili bileşenin akım yönü oku.
   İki nokta arası gerilim için voltmetre, dal akımı için seri ampermetre eklenebilir.
+- **Analiz yöntemleri (Bölüm 3–4):** kabloya dokununca KAY tablosu, bileşende KGY çevresi; çoklu seçimde seri/paralel eşdeğer,
+  gerilim ve akım bölücü formülleri; öğrencinin yazacağı biçimde düğüm denklemleri (süperdüğüm dahil) ve çevre denklemleri
+  (süperçevre dahil, çizimde ↻ oklar); MATLAB, Python (NumPy), LaTeX ve SPICE (.cir) olarak kopyalama.
 - **Lab:** ölçülen V / I değerini girince yüzde hata; **Çözümü göster** modunda netlist ve MNA matrisi
   (seçili bileşenin damgası renkli).
 - **Rapor:** başlık bloğu, vektör devre şeması, analiz ayarları, sonuç tablosu (ölçülen + % hata),

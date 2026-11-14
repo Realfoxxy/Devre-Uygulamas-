@@ -8,6 +8,7 @@ import { formatEng, percentError } from '../core/units';
 import { isStale, useStore } from '../state/store';
 import { SolutionView } from './SolutionView';
 import { DependentFields } from './DependentFields';
+import { KclPanel, KvlPanel, SeriesParallelPanel } from './KirchhoffPanels';
 import { ValueInput } from './ValueInput';
 import { compDisplay, nodeText } from './values';
 
@@ -230,6 +231,7 @@ function CompResults({ comp }: { comp: Component }) {
         </tbody>
       </table>
       <p className="muted small">Pasif işaret kuralı: akım + uçtan girerse pozitif. Ok, gerçek akım yönünü gösterir.</p>
+      <KvlPanel key={comp.id} compId={comp.id} />
       <Measured comp={comp} res={res} />
     </div>
   );
@@ -314,9 +316,13 @@ export function ResultPanel() {
   const del = useStore((s) => s.deleteSelection);
   const group = useStore((s) => s.group);
   const [tab, setTab] = useState<'props' | 'solution'>('props');
+  const setSolutionOpen = useStore((s) => s.setSolutionOpen);
   useEffect(() => {
     if (!showSolution) setTab('props');
   }, [showSolution]);
+  useEffect(() => {
+    setSolutionOpen(showSolution && tab === 'solution');
+  }, [showSolution, tab, setSolutionOpen]);
 
   return (
     <div className="result-panel">
@@ -326,7 +332,7 @@ export function ResultPanel() {
             Özellikler
           </button>
           <button className={tab === 'solution' ? 'on' : ''} onClick={() => setTab('solution')}>
-            Çözüm (MNA)
+            Çözüm
           </button>
         </div>
       )}
@@ -343,6 +349,7 @@ export function ResultPanel() {
           <p className="muted small">
             Seçili bir öğeyi sürükleyerek hepsini birlikte taşıyın. Shift + tık ile seçime ekleyip çıkarabilirsiniz.
           </p>
+          <SeriesParallelPanel ids={group.comps} />
           <button className="btn danger" onClick={del}>
             Seçilenleri sil
           </button>
@@ -355,7 +362,8 @@ export function ResultPanel() {
       ) : sel?.kind === 'wire' ? (
         <div className="editor">
           <span className="badge">Kablo</span>
-          <p className="muted small">Kabloyu silmek için Delete tuşuna basın.</p>
+          <KclPanel wireId={sel.id} />
+          <p className="muted small">Kabloyu silmek için Delete tuşuna basın. Kablodan sürükleyerek yeni kablo çekebilirsiniz.</p>
           <button className="btn danger" onClick={del}>
             Kabloyu sil
           </button>

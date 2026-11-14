@@ -23,6 +23,8 @@ export interface SchematicProps {
   errorIds?: Set<string>;
   selectedComp?: string | null;
   selectedWire?: string | null;
+  /** Vurgulanan bileşenler (KGY çevresi) */
+  highlightIds?: Set<string>;
   /** Çoklu seçim */
   selectedComps?: Set<string>;
   selectedWires?: Set<string>;
@@ -137,6 +139,11 @@ export function Schematic(p: SchematicProps) {
                 ) : (
                   <rect x={-30} y={-18} width={60} height={36} fill="transparent" />
                 )}
+              </g>
+            )}
+            {p.highlightIds?.has(c.id) && (
+              <g transform={`translate(${c.x * G} ${c.y * G}) rotate(${c.rot})`} pointerEvents="none">
+                <rect x={-36} y={-23} width={72} height={46} rx={8} fill="rgba(234,88,12,0.10)" stroke="#ea580c" strokeWidth={1.5} />
               </g>
             )}
             {sel && interactive && (

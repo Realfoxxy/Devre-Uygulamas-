@@ -6,6 +6,7 @@ import { isStale, useStore } from '../state/store';
 import { G, PartSymbol, Theme } from './parts/symbols';
 import { Schematic, SEL_COLOR } from './Schematic';
 import { compDisplay } from './values';
+import { useMethods } from './useMethods';
 
 const SCREEN_THEME: Theme = {
   stroke: '#1d2433',
@@ -440,6 +441,8 @@ export function Canvas() {
 
   const selectedComp = s.selection?.kind === 'comp' ? s.selection.id : null;
   const groupComps = useMemo(() => new Set(s.group?.comps ?? []), [s.group]);
+  const highlightSet = useMemo(() => new Set(s.highlight), [s.highlight]);
+  const methods = useMethods(s.solutionOpen && s.solutionTab !== 'mna');
   const groupWires = useMemo(() => new Set(s.group?.wires ?? []), [s.group]);
   const tipComp = tip ? components.find((c) => c.id === tip.id) : null;
   const tipData = tipComp && s.results ? compDisplay(s.results, tipComp.id, tipComp.type, s.tIndex, s.doc.analysis.acMeasure) : null;
@@ -508,6 +511,7 @@ export function Canvas() {
             selectedComp={selectedComp}
             selectedWire={s.selection?.kind === 'wire' ? s.selection.id : null}
             selectedComps={groupComps}
+            highlightIds={highlightSet}
             selectedWires={groupWires}
             arrowFor={selectedComp}
             acMeasure={s.doc.analysis.acMeasure}
@@ -545,6 +549,37 @@ export function Canvas() {
               pointerEvents="none"
             />
           )}
+          {/* çevre akımları (saat yönünde) */}
+          {methods?.mesh?.ok && s.solutionTab === 'mesh' &&
+            methods.mesh.meshes.map((m) => (
+              <g key={m.name} transform={`translate(${m.center[0] * G} ${m.center[1] * G})`} pointerEvents="none">
+                <path d="M 0 -15 A 15 15 0 1 1 -14.3 -4.6" fill="none" stroke="#c2410c" strokeWidth={2} />
+                <polygon points="-14.3,-4.6 -18.5,-12 -9,-9.5" fill="#c2410c" transform="rotate(-8 -14.3 -4.6)" />
+                <text y={1} fontSize={12} fontWeight={700} fill="#c2410c" textAnchor="middle" dominantBaseline="central" fontFamily="DejaVuSans, sans-serif">
+                  {m.name}
+                </text>
+              </g>
+            ))}
+          {/* süperdüğümler */}
+          {methods?.node?.ok && s.solutionTab === 'node' &&
+            methods.node.supernodes.map((sn, i) => {
+              const set = new Set(sn);
+              const ptsIn: Pt[] = [];
+              for (const c of components) pinPositions(c).forEach((p, k) => set.has(methods.nl.pinNodes[c.id]?.[k]) && ptsIn.push(p));
+              for (const w of wires) if (set.has(methods.nl.wireNodes[w.id])) ptsIn.push(w.from, w.to);
+              if (!ptsIn.length) return null;
+              const xs = ptsIn.map((p) => p[0]);
+              const ys = ptsIn.map((p) => p[1]);
+              const x0 = Math.min(...xs) - 0.8, x1 = Math.max(...xs) + 0.8, y0 = Math.min(...ys) - 0.8, y1 = Math.max(...ys) + 0.8;
+              return (
+                <g key={i} pointerEvents="none">
+                  <rect x={x0 * G} y={y0 * G} width={(x1 - x0) * G} height={(y1 - y0) * G} rx={10} fill="rgba(15,118,110,0.06)" stroke="#0f766e" strokeWidth={1.6} strokeDasharray="7 5" />
+                  <text x={x0 * G + 6} y={y0 * G - 6} fontSize={11} fontWeight={700} fill="#0f766e" fontFamily="DejaVuSans, sans-serif">
+                    süperdüğüm {`{${sn.join(', ')}}`}
+                  </text>
+                </g>
+              );
+            })}
           {box && (
             <rect
               x={Math.min(box.a[0], box.b[0]) * G}

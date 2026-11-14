@@ -126,6 +126,36 @@ export const EXAMPLES: { name: string; doc: CircuitDoc }[] = [
     },
   },
   {
+    name: 'Süperdüğümlü devre (düğüm analizi)',
+    doc: {
+      ...base('Süperdüğüm'),
+      components: [
+        { id: 'V1', type: 'V', x: 4, y: 8, rot: 90, params: { mode: 'DC', value: 10, amp: 5, freq: 1000, phase: 0 } },
+        { id: 'R1', type: 'R', x: 9, y: 4, rot: 0, params: { value: 2 } },
+        { id: 'V2', type: 'V', x: 17, y: 4, rot: 0, params: { mode: 'DC', value: 4, amp: 5, freq: 1000, phase: 0 } },
+        { id: 'R2', type: 'R', x: 13, y: 8, rot: 90, params: { value: 4 } },
+        { id: 'R3', type: 'R', x: 21, y: 8, rot: 90, params: { value: 4 } },
+        { id: 'GND1', type: 'GND', x: 4, y: 13, rot: 0, params: {} },
+      ],
+      wires: [
+        { id: 'w1', from: [4, 6], to: [4, 4] },
+        { id: 'w2', from: [4, 4], to: [7, 4] },
+        { id: 'w3', from: [11, 4], to: [13, 4] },
+        { id: 'w4', from: [13, 4], to: [15, 4] },
+        { id: 'w5', from: [13, 4], to: [13, 6] },
+        { id: 'w6', from: [19, 4], to: [21, 4] },
+        { id: 'w7', from: [21, 4], to: [21, 6] },
+        { id: 'w8', from: [4, 10], to: [4, 12] },
+        { id: 'w9', from: [4, 12], to: [13, 12] },
+        { id: 'w10', from: [13, 12], to: [21, 12] },
+        { id: 'w11', from: [13, 12], to: [13, 10] },
+        { id: 'w12', from: [21, 12], to: [21, 10] },
+        { id: 'w13', from: [4, 12], to: [4, 13] },
+      ],
+      analysis: { ...DEFAULT_ANALYSIS, type: 'dc' },
+    },
+  },
+  {
     name: 'Wheatstone köprüsü (DC)',
     doc: {
       ...base('Wheatstone Köprüsü'),
