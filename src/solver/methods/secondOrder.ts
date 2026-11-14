@@ -72,7 +72,9 @@ export function findStates(nl: Netlist): { states: StateVar[]; dependent: { id: 
     if (ra !== rb) parent[ra] = rb;
   }
   const pairKey = (e: NetElement) => [...e.nodes].sort((x, y) => x - y).join('-');
-  for (const c of nl.elements.filter((e) => e.type === 'C')) {
+  const activeEls = nl.elements.filter((e) => !(e.type === 'VM' && !e.params.real));
+  const Cs = nl.elements.filter((e) => e.type === 'C');
+  for (const c of Cs) {
     const ra = find(c.nodes[0]);
     const rb = find(c.nodes[1]);
     if (ra === rb) {
@@ -86,6 +88,22 @@ export function findStates(nl: Netlist): { states: StateVar[]; dependent: { id: 
         const srcs = volt.filter((v) => find(v.nodes[0]) === ra).map((v) => v.id);
         dependent.push({ id: c.id, reason: `${c.id}'in gerilimi ${srcs.join(', ') || 'diğer kapasitörler'} tarafından belirleniyor; bağımsız durum değişkeni değil (C–V döngüsü).` });
       }
+      continue;
+    }
+    // seri kapasitör: bir ara düğümü yalnızca iki kapasitör paylaşıyorsa eşdeğer C'ye indirgenir
+    const seriesPartner = states.find((s) => {
+      if (s.kind !== 'C') return false;
+      const o = Cs.find((x) => x.id === s.id)!;
+      const shared = c.nodes.filter((k) => o.nodes.includes(k));
+      return shared.some((k) => activeEls.filter((e) => e.nodes.includes(k)).length === 2);
+    });
+    if (seriesPartner) {
+      const cVal = Number(c.params.value);
+      seriesPartner.value = (seriesPartner.value * cVal) / (seriesPartner.value + cVal);
+      seriesPartner.merged.push(c.id);
+      mergedTo.set(c.id, seriesPartner.id);
+      dependent.push({ id: c.id, reason: `${c.id}, ${seriesPartner.id} ile seri: ikisi tek durum değişkeni sayılır (C_eş = ${formatEng(seriesPartner.value, 'F')}).` });
+      parent[ra] = rb;
       continue;
     }
     parent[ra] = rb;
@@ -126,6 +144,15 @@ export function findStates(nl: Netlist): { states: StateVar[]; dependent: { id: 
   }
   Ls.forEach((l, i) => {
     if (!depL.has(i)) {
+      const twin = states.find((s) => s.kind === 'L' && pairKey(Ls.find((x) => x.id === s.id)!) === pairKey(l));
+      if (twin) {
+        const lVal = Number(l.params.value);
+        twin.value = (twin.value * lVal) / (twin.value + lVal);
+        twin.merged.push(l.id);
+        mergedTo.set(l.id, twin.id);
+        dependent.push({ id: l.id, reason: `${l.id}, ${twin.id} ile paralel: ikisi tek durum değişkeni sayılır (L_eş = ${formatEng(twin.value, 'H')}).` });
+        return;
+      }
       states.push({ id: l.id, kind: 'L', name: `i_${l.id}`, value: Number(l.params.value), merged: [] });
       return;
     }
@@ -136,8 +163,8 @@ export function findStates(nl: Netlist): { states: StateVar[]; dependent: { id: 
     const partner = states.find((s) => {
       if (s.kind !== 'L') return false;
       const o = Ls.find((x) => x.id === s.id)!;
-      const shared = l.nodes.filter((k) => o.nodes.includes(k) && k !== 0);
-      return shared.some((k) => nl.elements.filter((e) => e.nodes.includes(k)).length === 2);
+      const shared = l.nodes.filter((k) => o.nodes.includes(k));
+      return shared.some((k) => activeEls.filter((e) => e.nodes.includes(k)).length === 2);
     });
     if (partner) {
       partner.value += Number(l.params.value);
@@ -153,17 +180,20 @@ export function findStates(nl: Netlist): { states: StateVar[]; dependent: { id: 
 }
 
 /** Durum matrisleri: her durum değişkeni sırayla 1 yapılıp dirençli devre çözülür. */
-function stateMatrices(nl: Netlist, states: StateVar[], dependent: { id: string }[]) {
-  const depIds = new Set(dependent.map((d) => d.id));
+function stateMatrices(nl: Netlist, states: StateVar[], dependent: { id: string; reason?: string }[]) {
+  const depMap = new Map(dependent.map((d) => [d.id, d.reason ?? '']));
   const stateIds = new Set(states.map((s) => s.id));
   const inputs = nl.elements.filter((e) => STATE_SRC.has(e.type)).map((e) => e.id);
-  // Dirençli eşdeğer: C → gerilim kaynağı, L → akım kaynağı; bağımlı C açık, bağımlı L kısa
+  // Dirençli eşdeğer: C → gerilim kaynağı, L → akım kaynağı; seri birleşenler kısa (AM), paralel birleşenler açık
   const elements: NetElement[] = [];
   for (const e of nl.elements) {
     if (stateIds.has(e.id)) {
       elements.push({ ...e, type: e.type === 'C' ? 'V' : 'I', params: { mode: 'DC', value: 0 } });
-    } else if (depIds.has(e.id)) {
-      if (e.type === 'L') elements.push({ id: e.id, type: 'AM', nodes: e.nodes, params: {} });
+    } else if (depMap.has(e.id)) {
+      const r = depMap.get(e.id)!;
+      if ((e.type === 'L' && !r.includes('paralel')) || (e.type === 'C' && r.includes(' ile seri:'))) {
+        elements.push({ id: e.id, type: 'AM', nodes: e.nodes, params: {} });
+      }
     } else elements.push(e);
   }
   const rn: Netlist = { ...nl, elements };
@@ -392,6 +422,8 @@ function rlcFormula(nl: Netlist): string | undefined {
   const L = nl.elements.filter((e) => e.type === 'L');
   const C = nl.elements.filter((e) => e.type === 'C');
   if (R.length !== 1 || L.length !== 1 || C.length !== 1) return undefined;
+  if (nl.elements.some((e) => !['R', 'L', 'C', 'V', 'I', 'VM', 'AM'].includes(e.type) || ((e.type === 'VM' || e.type === 'AM') && e.params.real)))
+    return undefined;
   const r = Number(R[0].params.value);
   const l = Number(L[0].params.value);
   const c = Number(C[0].params.value);
@@ -399,9 +431,10 @@ function rlcFormula(nl: Netlist): string | undefined {
   if (key(R[0]) === key(L[0]) && key(L[0]) === key(C[0]))
     return `Paralel RLC: α = 1/(2RC) = 1/(2·${formatEng(r, 'Ω')}·${formatEng(c, 'F')}) = ${num(1 / (2 * r * c))} 1/s, ω₀ = 1/√(LC) = ${num(1 / Math.sqrt(l * c))} rad/s`;
   // seri: R, L, C tek bir çevrede (ara düğümlerin derecesi 2)
-  const deg = (k: number) => nl.elements.filter((e) => e.nodes.includes(k)).length;
+  const activeEls = nl.elements.filter((e) => e.type !== 'VM');
+  const deg = (k: number) => activeEls.filter((e) => e.nodes.includes(k)).length;
   const els = [R[0], L[0], C[0]];
-  const shared = (a: NetElement, b: NetElement) => a.nodes.filter((k) => b.nodes.includes(k) && k !== 0 && deg(k) === 2).length > 0;
+  const shared = (a: NetElement, b: NetElement) => a.nodes.filter((k) => b.nodes.includes(k) && deg(k) === 2).length > 0;
   const links = [shared(els[0], els[1]), shared(els[1], els[2]), shared(els[0], els[2])].filter(Boolean).length;
   if (links >= 2)
     return `Seri RLC: α = R/(2L) = ${formatEng(r, 'Ω')}/(2·${formatEng(l, 'H')}) = ${num(r / (2 * l))} 1/s, ω₀ = 1/√(LC) = ${num(1 / Math.sqrt(l * c))} rad/s`;
@@ -474,7 +507,7 @@ export function completeResponse(nl: Netlist, so: SecondOrderResult, res: TranRe
   const sim0 = (s: StateVar) => (s.kind === 'C' ? res.comps[s.id].V[0] : res.comps[s.id].I[0]);
   const x0 = so.states.map(sim0);
   const srcEls = so.inputs.map((id) => nl.elements.find((e) => e.id === id)!);
-  const u0 = srcEls.map((e) => (e.params.mode === 'AC' || e.params.mode === 'SINE_U' ? 0 : waveAt0(e)));
+  const u0 = srcEls.map(waveAt0);
   const dx0 = so.A.map((r, i) => r.reduce((s, a, j) => s + a * x0[j], 0) + so.B[i].reduce((s, b, k) => s + b * u0[k], 0));
   const m: ResponseModel = {
     index: outIndex,
@@ -568,11 +601,18 @@ export function completeResponse(nl: Netlist, so: SecondOrderResult, res: TranRe
   m.forcedText = `zorlanmış: ${forcedParts.join(' + ') || '0'}`;
   if (laterSwitch) notes.push('t = 0 sonrasında da anahtarlama var; formül yalnızca ilk aralık için geçerli.');
   m.note = notes.join(' ') || undefined;
-  // çözücünün kendi kontrolü
+  // çözücünün kendi kontrolü (sonradan anahtarlama varsa yalnızca ilk aralıkta karşılaştırılır)
+  const firstSw = Math.min(
+    Infinity,
+    ...nl.elements
+      .filter((e) => e.type === 'SW' || e.type === 'SW2')
+      .flatMap((e) => (e.params.times ?? []).filter((t) => t > 0)),
+  );
   const sim = st.kind === 'C' ? res.comps[st.id].V : res.comps[st.id].I;
   let dev = 0;
   let sc = 1e-15;
   for (let k = 0; k < res.t.length; k++) {
+    if (res.t[k] >= firstSw - 1e-15) break;
     sc = Math.max(sc, Math.abs(sim[k]));
     dev = Math.max(dev, Math.abs(responseEval(m, res.t[k]) - sim[k]));
   }
@@ -581,5 +621,11 @@ export function completeResponse(nl: Netlist, so: SecondOrderResult, res: TranRe
 }
 
 const sgn = (x: number) => (x < 0 ? '−' : '+');
-const waveAt0 = (e: NetElement) => (e.params.mode === 'STEP' ? Number(e.params.w1 ?? 0) : e.params.mode === 'EXP' ? Number(e.params.wk ?? 0) : Number(e.params.value ?? 0));
+const waveAt0 = (e: NetElement) => {
+  const p = e.params;
+  if (p.mode === 'AC' || p.mode === 'SINE_U') return Number(p.amp ?? 0) * Math.sin((Number(p.phase ?? 0) * Math.PI) / 180);
+  if (p.mode === 'STEP') return Number(p.w1 ?? 0);
+  if (p.mode === 'EXP') return Number(p.wk ?? 0);
+  return Number(p.value ?? 0);
+};
 const valueAfter = (e: NetElement) => (e.params.mode === 'STEP' ? Number(e.params.w1 ?? 0) : Number(e.params.value ?? 0));

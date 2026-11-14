@@ -312,10 +312,11 @@ export function stampElement(sys: MNASystem, e: NetElement, ctx: StampCtx) {
         return;
       }
       if (model === 'offset') {
-        // + girişe seri V_os, iki girişte öngerilim akımı I_b; çekirdek ideal
+        // + girişe seri V_os, iki girişte öngerilim akımı I_b; çekirdek ideal (AC'de ve sıfırlanan kaynaklarda 0)
         const pp = ctx.internal.get(`${id}#p`)!;
-        sys.stampVoltage(pp, p, `${id}#os`, cx(Number(e.params.vos ?? 5e-3)), id);
-        const Ib = Number(e.params.ib ?? 500e-9);
+        const on = ctx.mode !== 'ac' && !(ctx.zero && ctx.keep !== id);
+        sys.stampVoltage(pp, p, `${id}#os`, on ? cx(Number(e.params.vos ?? 5e-3)) : ZERO, id);
+        const Ib = on ? Number(e.params.ib ?? 500e-9) : 0;
         sys.stampCurrent(p, 0, cx(Ib), id);
         sys.stampCurrent(n, 0, cx(Ib), id);
         sys.stampIdealOpAmp(o, pp, n, id, id);
@@ -447,9 +448,16 @@ export function measureElement(e: NetElement, ctx: StampCtx, sol: Solution): Mea
         const j = sol.j(e.id); // j: o düğümünden op-amp'a giren akım
         iout = cx(-j.re, -j.im);
       }
+      const model = e.params.model ?? 'ideal';
       const rin = Number(e.params.rin ?? 1e6);
-      const iin = (e.params.model ?? 'ideal') === 'finite' ? cx((vp.re - vn.re) / rin, (vp.im - vn.im) / rin) : ZERO;
-      return { V: vo, I: iout, pinV: [vp, vn, vo], pinI: [iin, cx(-iin.re, -iin.im), cx(-iout.re, -iout.im)] };
+      const iin = model === 'finite' ? cx((vp.re - vn.re) / rin, (vp.im - vn.im) / rin) : ZERO;
+      const ib = model === 'offset' && ctx.mode !== 'ac' && !(ctx.zero && ctx.keep !== e.id) ? cx(Number(e.params.ib ?? 500e-9)) : ZERO;
+      return {
+        V: vo,
+        I: iout,
+        pinV: [vp, vn, vo],
+        pinI: [model === 'offset' ? ib : iin, model === 'offset' ? ib : cx(-iin.re, -iin.im), cx(-iout.re, -iout.im)],
+      };
     }
     case 'E':
     case 'H':

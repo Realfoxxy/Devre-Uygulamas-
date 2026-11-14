@@ -2,6 +2,7 @@
 // süperdüğümler, kısıt denklemleri ve G·v = i matrisi. Dirençli (DC) devre için yazılır:
 // kapasitör açık devre, bobin kısa devre (0 V kaynak) sayılır.
 import type { Netlist, NetElement } from '../../core/netlist';
+import { switchClosed, sw2Way } from '../stamp';
 import { sourceBefore } from '../waveform';
 import { Lin, Term, joinTerms, lin, linAdd, linEquation, linScale, linSystem, linVar, negateText, num, solveDense } from './linear';
 
@@ -50,9 +51,9 @@ function expandForNodal(nl: Netlist): Netlist | string {
       out.push({ ...e, type: 'I', params: { mode: 'DC', value: Number(p.kT ?? 1e-6) * (Number(p.tempC ?? 25) + 273.15) } });
     } else if (e.type === 'SW') {
       // t < 0 konumu: kapalıysa kısa devre, açıksa yok
-      if ((p.sw0 ?? 'open') === 'closed' && (p.times ?? []).filter((t) => t < 0).length % 2 === 0) out.push({ id: e.id, type: 'AM', nodes: e.nodes, params: {} });
+      if (switchClosed(e, { mode: 'dc', t: 0 })) out.push({ id: e.id, type: 'AM', nodes: e.nodes, params: {} });
     } else if (e.type === 'SW2') {
-      const to = (p.way ?? 'A') === 'A' ? e.nodes[1] : e.nodes[2];
+      const to = sw2Way(e, { mode: 'dc', t: 0 }) === 'A' ? e.nodes[1] : e.nodes[2];
       out.push({ id: e.id, type: 'AM', nodes: [e.nodes[0], to], params: {} });
     } else if ((e.type === 'VM' || e.type === 'AM') && p.real) {
       out.push({ id: e.id, type: 'R', nodes: e.nodes, params: { value: Number(p.rMeter ?? (e.type === 'VM' ? 10e6 : 1)) } });

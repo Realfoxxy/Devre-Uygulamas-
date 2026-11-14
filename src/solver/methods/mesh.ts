@@ -253,7 +253,9 @@ export function meshEquations(components: Component[], wires: Wire[], nl: Netlis
   const fmtLin = (l: Lin, first?: string) => {
     const t = [...l.c].filter(([, v]) => Math.abs(v) > 1e-12).sort(([a], [b]) => (a === first ? -1 : b === first ? 1 : 0));
     if (!t.length) return num(l.k);
-    return joinTerms(t.map(([n, v]) => (Math.abs(Math.abs(v) - 1) < 1e-12 ? (v < 0 ? `−${n}` : n) : `${num(v)}·${n}`)));
+    const terms = t.map(([n, v]) => (Math.abs(Math.abs(v) - 1) < 1e-12 ? (v < 0 ? `−${n}` : n) : `${num(v)}·${n}`));
+    if (Math.abs(l.k) > 1e-12) terms.push(num(l.k));
+    return joinTerms(terms);
   };
 
   // İki düğüm arası gerilim, gerilimi bilinen elemanlardan geçen bir yol boyunca

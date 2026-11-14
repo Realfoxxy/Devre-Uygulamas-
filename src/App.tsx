@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useStore } from './state/store';
+import { downloadProject } from './storage/project';
 import { Canvas } from './ui/Canvas';
 import { ExportDialog } from './ui/ExportDialog';
 import { MobileBar } from './ui/MobileBar';
@@ -67,7 +68,7 @@ export default function App() {
         s.selectAll();
       } else if (ctrl && e.key.toLowerCase() === 's') {
         e.preventDefault();
-        import('./storage/project').then((m) => m.downloadProject(s.doc));
+        downloadProject(s.doc);
       } else if (e.key === 'F5' || (ctrl && e.key === 'Enter')) {
         e.preventDefault();
         s.run();

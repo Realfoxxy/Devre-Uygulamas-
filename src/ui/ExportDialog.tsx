@@ -1,51 +1,49 @@
 // PDF rapor penceresi: başlık bilgileri (hatırlanır), grafik seçimi, sadece şema dışa aktarma.
 import { useState } from 'react';
 import { AppState, isStale, useStore } from '../state/store';
+import { buildNetlist } from '../core/netlist';
+import { formatEng } from '../core/units';
+import { nodeEquations } from '../solver/methods/nodal';
+import { meshEquations } from '../solver/methods/mesh';
+import { maxPower, superposition, thevenin } from '../solver/methods/theorems';
+import { phasorText } from './values';
 import type { ReportSections } from '../report/pdf';
 import { downloadBlob, loadReportHeader, ReportHeader, safeFileName, saveReportHeader } from '../storage/project';
 
 /** Rapor için isteğe bağlı araç bölümleri */
-async function buildSections(st: AppState, want: { node: boolean; mesh: boolean; theorem: boolean; dynamics: boolean }): Promise<ReportSections> {
-  const [{ buildNetlist }, nodal, mesh, th, units, values] = await Promise.all([
-    import('../core/netlist'),
-    import('../solver/methods/nodal'),
-    import('../solver/methods/mesh'),
-    import('../solver/methods/theorems'),
-    import('../core/units'),
-    import('./values'),
-  ]);
+function buildSections(st: AppState, want: { node: boolean; mesh: boolean; theorem: boolean; dynamics: boolean }): ReportSections {
   const nl = buildNetlist(st.doc.components, st.doc.wires);
   const out: ReportSections = { dynamics: want.dynamics };
-  if (want.node) out.nodeEquations = nodal.nodeEquations(nl);
-  if (want.mesh) out.meshEquations = mesh.meshEquations(st.doc.components, st.doc.wires, nl);
+  if (want.node) out.nodeEquations = nodeEquations(nl);
+  if (want.mesh) out.meshEquations = meshEquations(st.doc.components, st.doc.wires, nl);
   const card = st.theorem;
   if (want.theorem && card) {
     const mode = st.results?.kind === 'ac' ? { kind: 'ac' as const, freq: st.results.freq } : { kind: 'dc' as const };
     const ac = mode.kind === 'ac';
     const zt = (z: { re: number; im: number } | null, u: string) =>
-      !z ? '—' : ac ? values.phasorText(z, u) : units.formatEng(z.re, u);
+      !z ? '—' : ac ? phasorText(z, u) : formatEng(z.re, u);
     if (card.tool === 'thevenin' || card.tool === 'req') {
-      const r = th.thevenin(nl, card.a, card.b, mode, card.load);
-      const mp = th.maxPower(r);
+      const r = thevenin(nl, card.a, card.b, mode, card.load);
+      const mp = maxPower(r);
       out.thevenin = {
         a: card.a,
         b: card.b,
         Vth: zt(r.Vth, 'V'),
         IN: zt(r.IN, 'A'),
-        Rth: r.Zth ? (ac ? `${units.formatEng(r.Zth.re, 'Ω')} ${r.Zth.im < 0 ? '−' : '+'} j${units.formatEng(Math.abs(r.Zth.im), 'Ω')}` : units.formatEng(r.Zth.re, 'Ω')) : '∞',
+        Rth: r.Zth ? (ac ? `${formatEng(r.Zth.re, 'Ω')} ${r.Zth.im < 0 ? '−' : '+'} j${formatEng(Math.abs(r.Zth.im), 'Ω')}` : formatEng(r.Zth.re, 'Ω')) : '∞',
         notes: r.notes,
-        maxPower: mp.ok ? `P_max = ${units.formatEng(mp.Pmax!, 'W')} (${ac ? 'Z_L = Z_th*' : `R_L = ${units.formatEng(mp.ZL!.re, 'Ω')}`})` : undefined,
+        maxPower: mp.ok ? `P_max = ${formatEng(mp.Pmax!, 'W')} (${ac ? 'Z_L = Z_th*' : `R_L = ${formatEng(mp.ZL!.re, 'Ω')}`})` : undefined,
       };
     } else if (card.tool === 'super') {
-      const r = th.superposition(nl, card.target, mode);
+      const r = superposition(nl, card.target, mode);
       if (!('error' in r)) {
         out.superposition = {
           target: card.target,
           head: ['Açık kaynak', `v_${card.target}`, `i_${card.target}`, 'P'],
           rows: [
-            ...r.rows.map((x) => [x.source!, zt(x.V, 'V'), zt(x.I, 'A'), units.formatEng(x.P, 'W')]),
-            ['Toplam', zt(r.sumV, 'V'), zt(r.sumI, 'A'), units.formatEng(r.sumP, 'W')],
-            ['Tam çözüm', zt(r.full.V, 'V'), zt(r.full.I, 'A'), units.formatEng(r.full.P, 'W')],
+            ...r.rows.map((x) => [x.source!, zt(x.V, 'V'), zt(x.I, 'A'), formatEng(x.P, 'W')]),
+            ['Toplam', zt(r.sumV, 'V'), zt(r.sumI, 'A'), formatEng(r.sumP, 'W')],
+            ['Tam çözüm', zt(r.full.V, 'V'), zt(r.full.I, 'A'), formatEng(r.full.P, 'W')],
           ],
           note: 'Gerilim ve akım katkıları toplanır; güç akımın karesiyle orantılı olduğundan süperpozisyonla toplanmaz.',
         };
@@ -120,7 +118,7 @@ export function ExportDialog({ onClose }: { onClose: () => void }) {
         plotIds: plots,
         includeSolution: withSolution,
         info: st.resultsInfo,
-        sections: await buildSections(st, { node: withNode, mesh: withMesh, theorem: withTheorem, dynamics: withDyn }),
+        sections: buildSections(st, { node: withNode, mesh: withMesh, theorem: withTheorem, dynamics: withDyn }),
       });
       downloadBlob(doc.output('blob'), `${fileBase}-rapor.pdf`);
       onClose();
@@ -136,7 +134,7 @@ export function ExportDialog({ onClose }: { onClose: () => void }) {
     setErr(null);
     setBusy(true);
     try {
-      const { schematicSvg, svgToPngDataUrl } = await import('../report/schematicSvg');
+      const { schematicSvg, svgToPngDataUrl, buildSchematicPdf } = await import('../report/pdf');
       const st = useStore.getState();
       const fresh = !isStale(st);
       const svg = schematicSvg({
@@ -153,7 +151,6 @@ export function ExportDialog({ onClose }: { onClose: () => void }) {
         const blob = await (await fetch(url)).blob();
         downloadBlob(blob, `${fileBase}-sema.png`);
       } else {
-        const { buildSchematicPdf } = await import('../report/pdf');
         downloadBlob((await buildSchematicPdf(svg, h.deney)).output('blob'), `${fileBase}-sema.pdf`);
       }
     } catch (e) {

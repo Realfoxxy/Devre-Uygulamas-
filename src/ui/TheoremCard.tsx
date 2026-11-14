@@ -283,7 +283,12 @@ function SuperCard({ card }: { card: Extract<Card, { tool: 'super' }> }) {
           </tr>
         </tbody>
       </table>
-      <p className="small ok-text">Gerilim ve akım katkılarının toplamı tam çözüme eşit ✓</p>
+      {Math.hypot(r.sumV.re - r.full.V.re, r.sumV.im - r.full.V.im) <= 1e-6 * Math.max(1, Math.hypot(r.full.V.re, r.full.V.im)) &&
+      Math.hypot(r.sumI.re - r.full.I.re, r.sumI.im - r.full.I.im) <= 1e-6 * Math.max(1, Math.hypot(r.full.I.re, r.full.I.im)) ? (
+        <p className="small ok-text">Gerilim ve akım katkılarının toplamı tam çözüme eşit ✓</p>
+      ) : (
+        <p className="small bad-text">Gerilim ve akım katkılarının toplamı tam çözümden farklı (doğrusal olmayan / sabit ofset etkisi).</p>
+      )}
       <div className="issue info">
         Güç süperpozisyonla toplanmaz: katkıların güçleri toplamı {formatEng(r.sumP, 'W')}, gerçek güç {formatEng(r.full.P, 'W')}. Güç akımın
         karesiyle orantılı olduğu için doğrusal değildir.

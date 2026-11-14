@@ -158,7 +158,12 @@ export function buildNetlist(components: Component[], wires: Wire[]): Netlist {
   const floating: string[] = [];
   for (const c of components) {
     if (c.type === 'GND') continue;
-    if (pinNodes[c.id].some((n) => pinCount.get(n) === 1)) floating.push(c.id);
+    const ns = pinNodes[c.id];
+    if (c.type === 'SW2' || c.type === 'POT') {
+      if (ns.filter((n) => (pinCount.get(n) ?? 0) >= 2).length < 2) floating.push(c.id);
+    } else if (ns.some((n) => pinCount.get(n) === 1) || (ns.length === 2 && ns[0] === ns[1] && (pinCount.get(ns[0]) ?? 0) === 2)) {
+      floating.push(c.id);
+    }
   }
   if (floating.length) {
     issues.push({
@@ -268,13 +273,18 @@ export function netlistText(nl: Netlist): string {
         case 'F':
         case 'G':
         case 'H':
+        case 'OA':
+        case 'POT':
+        case 'TS':
+        case 'SW':
+        case 'SW2':
           val = describeValue(e.type, p);
           break;
         case 'VM':
-          val = '(voltmetre)';
+          val = p.real ? describeValue(e.type, p) : '(voltmetre)';
           break;
         case 'AM':
-          val = '(ampermetre)';
+          val = p.real ? describeValue(e.type, p) : '(ampermetre)';
           break;
       }
       return `${e.id.padEnd(5)} ${e.nodes.map((n) => String(n).padStart(2)).join(' ')}  ${val}`;

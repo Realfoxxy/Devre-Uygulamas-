@@ -122,7 +122,7 @@ function nearestIndex(t: ArrayLike<number>, x: number): number {
 export function Plots() {
   const s = useStore();
   const [energyOn, setEnergyOn] = useState(false);
-  const [e1, setE1] = useState(0);
+  const [e1Raw, setE1] = useState(0);
   const [e2Raw, setE2] = useState<number | null>(null);
   const res = s.results;
   const sel = s.selection?.kind === 'comp' ? s.selection.id : null;
@@ -156,6 +156,7 @@ export function Plots() {
 
   const tr = res?.kind === 'transient' ? res : null;
   const energyId = tr ? (ids[0] ?? null) : null;
+  const e1 = tr ? Math.min(e1Raw, tr.t.length - 1) : 0;
   const e2 = tr ? Math.min(e2Raw ?? tr.t.length - 1, tr.t.length - 1) : 0;
   const iv0 = tr?.firstOrder?.intervals.find((iv) => iv.tau);
   const tauLines = iv0?.tau ? [1, 3, 5].map((k) => ({ x: iv0.t0 + k * iv0.tau!, label: `${k === 1 ? '' : k}τ` })) : undefined;

@@ -36,10 +36,11 @@ export function initialConditions(nl: Netlist, info: string[] = []) {
     try {
       x = sys.solveReal();
     } catch {
-      // t < 0'da boşta kalan düğümler: çok küçük iletkenlikle 0 V'a çekilir
+      // t < 0'da boşta kalan düğümler veya paralel bobinler: çok küçük iletkenlik / dirençle tekillik giderilir
       sys = newSystem(nl, ctx, false);
       for (let k = 1; k <= ctx.nodeTotal; k++) sys.stampAdmittance(k, 0, cx(1e-12));
       stampAll(sys, nl, ctx);
+      for (let r = ctx.nodeTotal; r < sys.N; r++) sys.addA(r, r, -1e-12, 0);
       try {
         x = sys.solveReal();
       } catch {
@@ -267,7 +268,7 @@ export function solveTransient(nl: Netlist, s: AnalysisSettings): { result: Tran
   let t0ok = false;
   {
     const ctx0 = makeCtx('tran0', nl0, { t: 0, h: t[1] - t[0], state });
-    const sys0 = newSystem(nl0, ctx0, false);
+    let sys0 = newSystem(nl0, ctx0, false);
     stampAll(sys0, nl0, ctx0);
     try {
       const x0 = sys0.solveReal();
@@ -277,6 +278,36 @@ export function solveTransient(nl: Netlist, s: AnalysisSettings): { result: Tran
       for (const e of els) after[e.id] = { V: cV[e.id][0], I: cI[e.id][0] };
     } catch (err) {
       if (!(err instanceof SingularMatrixError)) throw err;
+      // Paralel kapasitörler veya seri bobinler: sonsuz küçük companion düzenlileştirmesiyle 0⁺ çözümü
+      try {
+        const eps = Math.max(1e-15, 1e-9 * (t[1] - t[0]));
+        sys0 = newSystem(nl0, ctx0, false);
+        for (let k = 1; k <= ctx0.nodeTotal; k++) sys0.stampAdmittance(k, 0, cx(1e-12));
+        stampAll(sys0, nl0, ctx0);
+        for (const e of nl0.elements) {
+          if (e.type === 'C' && sys0.hasBranch(e.id)) {
+            const b = sys0.branch(e.id);
+            sys0.addA(b, b, -eps / Math.max(1e-15, Number(e.params.value)), 0);
+          } else if (e.type === 'L') {
+            sys0.stampAdmittance(e.nodes[0], e.nodes[1], cx(eps / Math.max(1e-15, Number(e.params.value))));
+          }
+        }
+        const x0 = sys0.solveReal();
+        const vAt = (node: number) => (node > 0 ? x0[node - 1] : 0);
+        const contOk = nl0.elements.every(
+          (e) =>
+            e.type !== 'C' ||
+            Math.abs(vAt(e.nodes[0]) - vAt(e.nodes[1]) - Number(e.params.v0 ?? 0)) <= 1e-4 * Math.max(1, Math.abs(Number(e.params.v0 ?? 0))),
+        );
+        if (contOk) {
+          record(0, sys0, x0, ctx0, nl0.elements);
+          t0ok = true;
+          after = {};
+          for (const e of els) after[e.id] = { V: cV[e.id][0], I: cI[e.id][0] };
+        }
+      } catch {
+        /* t0ok false kalır, ilk adım kullanılır */
+      }
     }
   }
 

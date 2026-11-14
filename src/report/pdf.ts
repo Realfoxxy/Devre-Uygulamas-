@@ -12,7 +12,8 @@ import type { ReportHeader } from '../storage/project';
 import { bodeConfigs, renderChartPNG, transientConfigs } from '../ui/chartConfig';
 import { fmtCell } from '../ui/SolutionView';
 import { compDisplay, nodeText, stepIndex } from '../ui/values';
-import { schematicSvg } from './schematicSvg';
+import { schematicSvg, svgToPngDataUrl } from './schematicSvg';
+export { schematicSvg, svgToPngDataUrl };
 import type { MethodResult } from '../solver/methods/nodal';
 
 const FONT = 'DejaVuSans';
@@ -254,7 +255,8 @@ export async function buildReport(r: ReportInput): Promise<jsPDF> {
     margin: { left: M + leftW + 4, right: M, bottom: 14 },
     pageBreak: 'avoid',
   });
-  y = Math.max(yL, lastY()) + 5;
+  const pageR = doc.getNumberOfPages();
+  y = (pageR > pageL ? lastY() : Math.max(yL, lastY())) + 5;
 
   // 4) Sonuç tablosu
   const comps = r.components.filter((c) => c.type !== 'GND');
@@ -364,9 +366,10 @@ export async function buildReport(r: ReportInput): Promise<jsPDF> {
     for (const d of so.dependent) rowsSO.push(['Not', d.reason]);
     // s-düzlemi küçük çizim sağda
     const plotW = 42;
+    const pageBefore = doc.getNumberOfPages();
     autoTable(doc, { ...table, startY: y, body: rowsSO, tableWidth: CW - plotW - 4, margin: { left: M, right: M + plotW + 4, bottom: 14 }, styles: { ...table.styles, fontSize: 7.4 }, columnStyles: { 0: { fontStyle: 'bold', cellWidth: 30 } }, pageBreak: 'avoid' });
     const yEnd = lastY();
-    const top = yEnd - Math.min(yEnd - y, 60) < y ? y : y;
+    const top = doc.getNumberOfPages() > pageBefore ? Math.max(M, yEnd - plotW) : y;
     drawSPlane(doc, so.roots, so.omega0, M + CW - plotW, top, plotW);
     y = Math.max(yEnd, top + plotW) + 4;
   }
@@ -410,10 +413,11 @@ export async function buildReport(r: ReportInput): Promise<jsPDF> {
       ...table,
       startY: y,
       head: [['Eleman', 'Düğümler', 'Değer']],
-      body: lines.map((l) => {
+      body: lines.map((l, idx) => {
         const t = l.trim().split(/\s+/);
-        const nodes = t.slice(1).filter((x) => /^\d+$/.test(x));
-        return [t[0], nodes.join(', '), t.slice(1 + nodes.length).join(' ')];
+        const nLen = r.netlist.elements[idx]?.nodes.length ?? 2;
+        const nodes = t.slice(1, 1 + nLen);
+        return [t[0], nodes.join(', '), t.slice(1 + nLen).join(' ')];
       }),
       styles: { ...table.styles, fontSize: 7.4 },
       pageBreak: smallTable(lines.length),

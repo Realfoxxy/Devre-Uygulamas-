@@ -308,9 +308,9 @@ function Summary() {
         </thead>
         <tbody>
           {comps.map((c) => {
-            const d = compDisplay(res, c.id, c.type, s.tIndex, s.doc.analysis.acMeasure);
-            const V = d?.rows.find((r) => r.label.startsWith('Gerilim'))?.value ?? '—';
-            const I = d?.rows.find((r) => r.label.startsWith('Akım'))?.value ?? '—';
+            const d = compDisplay(res, c.id, c.type, s.tIndex, s.doc.analysis.acMeasure, c.params);
+            const V = d?.rows.find((r) => r.label.startsWith('Gerilim') || r.label.startsWith('Çıkış gerilimi'))?.value ?? '—';
+            const I = d?.rows.find((r) => r.label.startsWith('Akım') || r.label.startsWith('Çıkış akımı'))?.value ?? '—';
             return (
               <tr key={c.id} onClick={() => s.select({ kind: 'comp', id: c.id })} className="clickable">
                 <td>
