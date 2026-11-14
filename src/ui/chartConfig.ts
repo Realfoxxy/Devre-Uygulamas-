@@ -48,8 +48,11 @@ function baseLine(title: string, xUnit: string, yUnit: string, logX = false, pri
         title: { display: false, text: title },
         tooltip: {
           callbacks: {
-            title: (items) => formatEng(items[0].parsed.x, xUnit),
-            label: (item) => `${item.dataset.label}: ${yUnit === 'dB' || yUnit === '°' ? item.parsed.y.toFixed(2) + ' ' + yUnit : formatEng(item.parsed.y, yUnit)}`,
+            title: (items) => formatEng(items[0].parsed.x ?? 0, xUnit),
+            label: (item) => {
+              const y = item.parsed.y ?? 0;
+              return `${item.dataset.label}: ${yUnit === 'dB' || yUnit === '°' ? y.toFixed(2) + ' ' + yUnit : formatEng(y, yUnit)}`;
+            },
           },
         },
       },
