@@ -24,8 +24,33 @@ export interface FOInterval {
   note?: string;
   /** Formül ile simülasyon arasındaki en büyük fark (salınıma göre %) */
   deviation?: number;
-  /** Formülün değerlendirilmesi */
-  evalAt?: (t: number) => number;
+  /** Formülün sayısal modeli (Web Worker'dan aktarılabilsin diye düz veri) */
+  model?: FOModel;
+}
+
+export interface FOModel {
+  t0: number;
+  tau: number;
+  /** sabit zorlanmış kısım */
+  xf0: number;
+  sines: { mag: number; w: number; ph: number }[];
+  exps: { X: number; b: number; td: number }[];
+  /** doğal yanıt katsayısı */
+  A: number;
+}
+
+/** Zorlanmış yanıt x_f(t) */
+export function foForced(m: FOModel, t: number): number {
+  let x = m.xf0;
+  for (const s of m.sines) x += s.mag * Math.sin(s.w * t + s.ph);
+  for (const e of m.exps) x += e.X * Math.exp(-e.b * (t - e.td));
+  return x;
+}
+
+/** Tam yanıt x(t) = x_f(t) + A·e^(−(t − t₀)/τ) */
+export function foEval(iv: FOInterval, t: number): number {
+  const m = iv.model!;
+  return foForced(m, t) + m.A * Math.exp(-(t - m.t0) / m.tau);
 }
 
 export interface FirstOrderResult {
@@ -69,7 +94,7 @@ export function firstOrderAnalysis(nl: Netlist, res: TranResult): FirstOrderResu
   const warnings: string[] = [];
   const intervals: FOInterval[] = [];
   const sim = kind === 'C' ? res.comps[el.id].V : res.comps[el.id].I;
-  let prevEval: ((t: number) => number) | null = null;
+  let prevIv: FOInterval | null = null;
   let unstable = false;
 
   const stateValue = (e: NetElement, ctxSol: ReturnType<typeof solutionFrom>, ctx: ReturnType<typeof makeCtx>) => {
@@ -82,13 +107,13 @@ export function firstOrderAnalysis(nl: Netlist, res: TranResult): FirstOrderResu
     const b = bounds[i + 1];
     const ka = nearest(res.t, a);
     // x(t₀⁺): ilk aralıkta 0⁺ değeri, sonra bir önceki formülün aralık sonundaki değeri (süreklilik)
-    const x0: number = prevEval ? prevEval(a) : i === 0 && res.initial ? (kind === 'C' ? res.initial.after[el.id].V : res.initial.after[el.id].I) : sim[ka];
+    const x0: number = prevIv ? foEval(prevIv, a) : i === 0 && res.initial ? (kind === 'C' ? res.initial.after[el.id].V : res.initial.after[el.id].I) : sim[ka];
     const Rth = theveninResistance(nl, el.nodes[0], el.nodes[1], new Set([el.id]), a);
     const iv: FOInterval = { t0: a, t1: b, x0, xinf: null, Rth, tau: null, formula: null, tauText: '' };
     if (Rth === null) {
       iv.note = 'Bu aralıkta eleman uçlarından görülen direnç tanımsız (açık devre); τ hesaplanamadı.';
       intervals.push(iv);
-      prevEval = null;
+      prevIv = null;
       continue;
     }
     if (Rth <= 1e-12) {
@@ -97,7 +122,7 @@ export function firstOrderAnalysis(nl: Netlist, res: TranResult): FirstOrderResu
         ? `Bu devre kararsız: R_th = ${formatEng(Rth, 'Ω')} ≤ 0, doğal yanıt zamanla büyüyor (Bölüm 8.5). Gerçekte bağımlı kaynak veya op-amp doyuma girer.`
         : 'R_th = 0: eleman ideal bir kaynağa doğrudan bağlı; geçiş anlık olur.';
       intervals.push(iv);
-      prevEval = null;
+      prevIv = null;
       continue;
     }
     const tau = kind === 'C' ? Rth * val : val / Rth;
@@ -121,10 +146,12 @@ export function firstOrderAnalysis(nl: Netlist, res: TranResult): FirstOrderResu
       if (!(e instanceof SingularMatrixError)) throw e;
       iv.note = 'x(∞) için DC çözüm bulunamadı.';
       intervals.push(iv);
-      prevEval = null;
+      prevIv = null;
       continue;
     }
-    const parts: { text: string; f: (t: number) => number }[] = [];
+    const parts: { text: string }[] = [];
+    const sines: FOModel['sines'] = [];
+    const exps: FOModel['exps'] = [];
     let unsupported: string | null = null;
     for (const src of nonConst) {
       const p = src.params;
@@ -142,7 +169,8 @@ export function firstOrderAnalysis(nl: Netlist, res: TranResult): FirstOrderResu
         const X = stateValue(el, solutionFrom(sys, sys.solveComplex()), ctx);
         const mag = abs(X);
         const ph = arg(X) + (Number(p.phase ?? 0) * Math.PI) / 180;
-        parts.push({ text: `${formatEng(mag, unit)}·sin(${+(w / (2 * Math.PI)).toPrecision(4)}·2πt ${ph < 0 ? '−' : '+'} ${Math.abs((ph * 180) / Math.PI).toFixed(1)}°)`, f: (t) => mag * Math.sin(w * t + ph) });
+        parts.push({ text: `${formatEng(mag, unit)}·sin(${+(w / (2 * Math.PI)).toPrecision(4)}·2πt ${ph < 0 ? '−' : '+'} ${Math.abs((ph * 180) / Math.PI).toFixed(1)}°)` });
+        sines.push({ mag, w, ph });
       } else if (p.mode === 'EXP') {
         const bb = Number(p.wb ?? 0);
         if (Math.abs(bb - 1 / tau) < 1e-3 / tau) {
@@ -157,7 +185,8 @@ export function firstOrderAnalysis(nl: Netlist, res: TranResult): FirstOrderResu
         const sys = newSystem(nl, ctx, false);
         stampAll(sys, nl, ctx);
         const X = stateValue(el, solutionFrom(sys, sys.solveComplex()), ctx).re;
-        parts.push({ text: `${formatEng(X, unit)}·e^(−${+bb.toPrecision(4)}·(t${td ? ` − ${formatEng(td, 's')}` : ''}))`, f: (t) => X * Math.exp(-bb * (t - td)) });
+        parts.push({ text: `${formatEng(X, unit)}·e^(−${+bb.toPrecision(4)}·(t${td ? ` − ${formatEng(td, 's')}` : ''}))` });
+        exps.push({ X, b: bb, td });
       } else {
         unsupported = `${src.id} (${p.mode === 'RAMP' ? 'rampa' : 'parçalı doğrusal'}) girişi için formül gösterilmiyor`;
       }
@@ -165,13 +194,14 @@ export function firstOrderAnalysis(nl: Netlist, res: TranResult): FirstOrderResu
     if (unsupported) {
       iv.note = `Formül yok: ${unsupported}; eğri simülasyondan.`;
       intervals.push(iv);
-      prevEval = null;
+      prevIv = null;
       continue;
     }
-    const xf = (t: number): number => xf0 + parts.reduce((s, q) => s + q.f(t), 0);
+    const base: FOModel = { t0: a, tau, xf0, sines, exps, A: 0 };
+    const xf = (t: number): number => foForced(base, t);
     const A: number = x0 - xf(a);
-    const evalAt = (t: number): number => xf(t) + A * Math.exp(-(t - a) / tau);
-    iv.evalAt = evalAt;
+    iv.model = { ...base, A };
+    const evalAt = (t: number): number => foEval(iv, t);
     const tt = a ? `(t − ${formatEng(a, 's')})` : 't';
     if (!parts.length) {
       iv.xinf = xf0;
@@ -194,7 +224,7 @@ export function firstOrderAnalysis(nl: Netlist, res: TranResult): FirstOrderResu
     if (iv.deviation > 0.5)
       warnings.push(`${a ? `${formatEng(a, 's')} sonrası` : 'İlk'} aralıkta formül ile simülasyon %${iv.deviation.toFixed(2)} farklı (zaman adımını küçültün ya da trapez yöntemini seçin).`);
     intervals.push(iv);
-    prevEval = evalAt;
+    prevIv = iv;
   }
   return { applicable: true, elem: el.id, kind, symbol, unit, intervals, warnings, unstable };
 }

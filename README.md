@@ -30,6 +30,10 @@ Hiçbir veri sunucuya gitmez.
   çözümü) ya da elle, 0⁻ / 0⁺ tablosu (sürekli / sıçrayan büyüklükler), depolanan enerji, her anahtarlama aralığı için
   x(t) = x(∞) + [x(t₀⁺) − x(∞)]e^(−(t−t₀)/τ) formülü (sinüs / üstel girişte doğal + zorlanmış), kararsızlık uyarısı,
   op-amp integral / türev alıcı tanıma.
+- **İkinci derece devreler (Bölüm 9):** derece (bağımsız C + L; paralel C / seri L tek sayılır, C–V döngüsü ve L–I kesitlemesi
+  tespiti), durum denklemleri, karakteristik denklem, α / ω₀, sönüm türü, seri / paralel RLC formülleri, s-düzlemi grafiği
+  (direnç kaydırıcısıyla canlı kökler), zorlanmış yanıt (sabit, üstel, sinüs; çakışan giriş) ve tam yanıt formülü; formül
+  eğrisi simülasyonla aynı grafikte.
 - **Lab:** ölçülen V / I değerini girince yüzde hata; **Çözümü göster** modunda netlist ve MNA matrisi
   (seçili bileşenin damgası renkli).
 - **Rapor:** başlık bloğu, vektör devre şeması, analiz ayarları, sonuç tablosu (ölçülen + % hata),

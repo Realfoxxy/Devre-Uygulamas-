@@ -87,7 +87,7 @@ function baseLine(title: string, xUnit: string, yUnit: string, logX = false, pri
   };
 }
 
-export function transientConfigs(res: TranResult, ids: string[], print = false) {
+export function transientConfigs(res: TranResult, ids: string[], print = false, formula?: { id: string; kind: 'V' | 'I'; f: (t: number) => number }) {
   const v = baseLine('Gerilim v(t)', 's', 'V', false, print);
   const i = baseLine('Akım i(t)', 's', 'A', false, print);
   ids.forEach((id, k) => {
@@ -97,6 +97,14 @@ export function transientConfigs(res: TranResult, ids: string[], print = false) 
     v.data.datasets.push({ label: `v ${id}`, data: decimate(res.t, c.V), borderColor: color, backgroundColor: color });
     i.data.datasets.push({ label: `i ${id}`, data: decimate(res.t, c.I), borderColor: color, backgroundColor: color });
   });
+  if (formula && ids.includes(formula.id)) {
+    const pts: { x: number; y: number }[] = [];
+    for (let k = 0; k <= 400; k++) {
+      const t = (res.tStop * k) / 400;
+      pts.push({ x: t, y: formula.f(t) });
+    }
+    (formula.kind === 'V' ? v : i).data.datasets.push({ label: `formül ${formula.id}`, data: pts, borderColor: '#d92d20', backgroundColor: '#d92d20', borderDash: [5, 4] });
+  }
   for (const cfg of [v, i]) {
     cfg.options!.scales!.x!.min = 0;
     cfg.options!.scales!.x!.max = res.tStop;

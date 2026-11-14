@@ -74,6 +74,8 @@ export interface TranResult {
   method: 'be' | 'trap';
   /** Anahtarlı devrelerde 0⁻ (t < 0 DC çözümü) ve 0⁺ değerleri */
   initial?: { before: Record<string, { V: number; I: number }>; after: Record<string, { V: number; I: number }> };
+  /** İkinci (ve daha yüksek) derece analiz ve tam yanıt */
+  secondOrder?: { analysis: import('../solver/methods/secondOrder').SecondOrderResult; response: import('../solver/methods/secondOrder').ResponseModel | null };
   /** Birinci derece analiz (anahtarlama aralıkları, formüller) */
   firstOrder?: import('../solver/methods/firstOrder').FirstOrderResult;
   system: SystemDump;

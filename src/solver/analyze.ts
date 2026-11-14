@@ -9,6 +9,7 @@ import { solveTransient } from './transient';
 import { validateControls, validateTopology } from './validate';
 import { isDependent } from '../core/circuit';
 import { firstOrderAnalysis } from './methods/firstOrder';
+import { completeResponse, secondOrderAnalysis } from './methods/secondOrder';
 import type { AnalysisResult } from '../core/results';
 import { abs } from '../core/complex';
 import { formatEng } from '../core/units';
@@ -60,6 +61,22 @@ export function analyze(nl: Netlist, settings: AnalysisSettings): AnalyzeOutput 
       /* birinci derece analiz isteğe bağlı */
     }
     opampCircuits(nl, result, issues, info);
+    try {
+      const so = secondOrderAnalysis(nl);
+      if (so.ok && (so.order >= 2 || (so.dependent.length > 0 && !result.firstOrder))) {
+        let response = null;
+        try {
+          response = completeResponse(nl, so, result);
+        } catch {
+          response = null;
+        }
+        result.secondOrder = { analysis: so, response };
+        if (response?.deviation !== undefined && response.deviation > 0.5)
+          issues.push({ level: 'warning', message: `İkinci derece formül ile simülasyon %${response.deviation.toFixed(2)} farklı (zaman adımını küçültün ya da trapez yöntemini seçin).`, compIds: [] });
+      }
+    } catch {
+      /* isteğe bağlı */
+    }
     return { ok: true, result, issues, settings, info };
   } catch (err) {
     if (err instanceof SingularMatrixError) {
