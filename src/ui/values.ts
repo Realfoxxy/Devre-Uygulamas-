@@ -57,6 +57,20 @@ export function compDisplay(
     if ((params?.model ?? 'ideal') !== 'finite')
       d.rows.push({ label: 'İdeal op-amp', value: 'v₊ = v₋ (sanal kısa devre), i₊ = i₋ = 0' });
   }
+  // Bölüm 2.3: aktif / pasif ve pasif işaret kuralına göre güç
+  if (type !== 'GND' && type !== 'VM' && type !== 'AM') {
+    const active = ['V', 'I', 'E', 'F', 'G', 'H', 'OA', 'TS'].includes(type);
+    const pRow = d.rows.find((r) => /güç/i.test(r.label));
+    const pNum = res.kind === 'dc' ? res.comps[id]?.P : res.kind === 'ac' ? res.comps[id]?.P : (() => {
+      const vi = compVI(res, id, tIndex);
+      return vi ? vi.V.re * vi.I.re : 0;
+    })();
+    d.rows.push({
+      label: 'Eleman',
+      value: `${active ? 'aktif' : 'pasif'}${pRow && pNum !== undefined && Math.abs(pNum) > 1e-15 ? ` — güç ${pNum > 0 ? 'soğuruyor' : 'veriyor'}` : ''}`,
+      hint: active ? 'enerji verebilir (Bölüm 2.3)' : 'yalnızca enerji soğurur ya da depolar',
+    });
+  }
   if ((type === 'C' || type === 'L') && params?.value && res.kind !== 'ac') {
     const vi = compVI(res, id, tIndex)!;
     const val = Number(params.value);

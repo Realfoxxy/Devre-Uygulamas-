@@ -147,7 +147,7 @@ export function buildNetlist(components: Component[], wires: Wire[]): Netlist {
   if (grounds.length === 0 && elements.length > 0) {
     issues.push({
       level: 'error',
-      message: 'Toprak yok: devreye en az bir toprak (GND) bileşeni ekleyin.',
+      message: 'Toprak yok: devrede toprak (GND) bileşeni yok. Gerilimler bir referansa göre ölçülür; herhangi bir düğüme toprak ekleyin.',
       compIds: [],
     });
   }
@@ -163,14 +163,14 @@ export function buildNetlist(components: Component[], wires: Wire[]): Netlist {
   if (floating.length) {
     issues.push({
       level: 'error',
-      message: `Boştaki uç: ${floating.join(', ')} bileşeninin bir ucu hiçbir şeye bağlı değil.`,
+      message: `Boştaki uç: ${floating.join(', ')} ${floating.length > 1 ? 'bileşenlerinin' : 'bileşeninin'} bir ucu bağlı değil (turuncu halka). Bu uçtan akım geçmez; ucu bir kabloyla devreye bağlayın.`,
       compIds: floating,
     });
   }
   if (grounds.length > 0 && elements.length > 0 && (pinCount.get(0) ?? 0) === grounds.length) {
     issues.push({
       level: 'error',
-      message: 'Toprak bileşeni devreye bağlı değil: GND ucunu bir kabloyla devreye bağlayın.',
+      message: 'Toprak bileşeni devreye bağlı değil: toprak sembolü tek başına duruyor. GND ucunu bir kabloyla devreye bağlayın.',
       compIds: grounds.map((g) => g.id),
     });
   }

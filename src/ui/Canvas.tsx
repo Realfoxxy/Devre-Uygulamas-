@@ -23,6 +23,8 @@ export const canvasApi: {
   placeAtClient?: (type: CompType, rot: number, clientX: number, clientY: number) => boolean;
   ghostAtClient?: (clientX: number, clientY: number) => void;
   fit?: () => void;
+  /** Bileşeni çizim alanının ortasına getir */
+  focus?: (id: string) => void;
   svg?: SVGSVGElement | null;
 } = {};
 
@@ -77,6 +79,9 @@ export function Canvas() {
   const { components, wires } = s.doc;
   const stale = isStale(s);
   const errorIds = useMemo(() => new Set(s.issues.flatMap((i) => (i.level === 'error' ? i.compIds : []))), [s.issues]);
+  const firstError = s.issues.find((i) => i.level === 'error');
+  const [errDismissed, setErrDismissed] = useState(false);
+  useEffect(() => setErrDismissed(false), [s.issues]);
 
   const toGrid = useCallback(
     (clientX: number, clientY: number): Pt => {
@@ -117,6 +122,12 @@ export function Canvas() {
   useEffect(() => {
     canvasApi.svg = svgRef.current;
     canvasApi.fit = fit;
+    canvasApi.focus = (id) => {
+      const c = useStore.getState().doc.components.find((cc) => cc.id === id);
+      const r = svgRef.current?.getBoundingClientRect();
+      if (!c || !r) return;
+      setView((v) => ({ ...v, x: r.width / 2 - c.x * G * v.k, y: r.height / 2 - c.y * G * v.k }));
+    };
     canvasApi.ghostAtClient = (cx, cy) => {
       const r = svgRef.current?.getBoundingClientRect();
       if (!r) return;
@@ -673,6 +684,25 @@ export function Canvas() {
         <button title="Uzaklaştır" onClick={() => zoomBy(1 / 1.2)}>−</button>
         <button title="Devreyi sığdır" onClick={fit}>⤢</button>
       </div>
+      {firstError && !errDismissed && (
+        <div className="error-strip" role="alert">
+          <button
+            className="error-text"
+            onClick={() => {
+              const id = firstError.compIds[0];
+              if (id) {
+                s.select({ kind: 'comp', id });
+                canvasApi.focus?.(id);
+              }
+            }}
+          >
+            {firstError.message}
+          </button>
+          <button className="icon-btn" aria-label="Kapat" onClick={() => setErrDismissed(true)}>
+            ✕
+          </button>
+        </div>
+      )}
       {s.pickNodes && (
         <div className="pick-banner" role="status">
           <span>

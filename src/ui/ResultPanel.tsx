@@ -8,6 +8,7 @@ import { formatEng, percentError } from '../core/units';
 import { isStale, useStore } from '../state/store';
 import { SolutionView } from './SolutionView';
 import { DependentFields } from './DependentFields';
+import { canvasApi } from './Canvas';
 import { ExtraFields } from './ExtraFields';
 import { SourceFields } from './SourceFields';
 import { TheoremPanel } from './TheoremCard';
@@ -16,6 +17,23 @@ import { SecondOrderCard } from './SecondOrderCard';
 import { KclPanel, KvlPanel, SeriesParallelPanel } from './KirchhoffPanels';
 import { ValueInput } from './ValueInput';
 import { compDisplay, nodeText } from './values';
+
+function ExampleTip() {
+  const tip = useStore((s) => s.exampleTip);
+  const set = useStore((s) => s.setExampleTip);
+  if (!tip) return null;
+  return (
+    <div className="ex-tip">
+      <div>
+        <b>{tip.name}</b> — neye bakmalı?
+        <div className="small">{tip.tip}</div>
+      </div>
+      <button className="icon-btn" aria-label="Kapat" onClick={() => set(null)}>
+        ✕
+      </button>
+    </div>
+  );
+}
 
 function Issues() {
   const issues = useStore((s) => s.issues);
@@ -30,7 +48,14 @@ function Issues() {
           {i.compIds.length > 0 && (
             <span className="issue-links">
               {i.compIds.map((id) => (
-                <button key={id} className="link" onClick={() => select({ kind: 'comp', id })}>
+                <button
+                  key={id}
+                  className="link"
+                  onClick={() => {
+                    select({ kind: 'comp', id });
+                    canvasApi.focus?.(id);
+                  }}
+                >
                   {id}
                 </button>
               ))}
@@ -330,6 +355,7 @@ export function ResultPanel() {
           </button>
         </div>
       )}
+      <ExampleTip />
       <Issues />
       <TheoremPanel />
       {tab === 'solution' && showSolution ? (
