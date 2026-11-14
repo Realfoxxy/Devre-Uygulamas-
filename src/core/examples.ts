@@ -159,6 +159,30 @@ export const EXAMPLES: { name: string; doc: CircuitDoc }[] = [
     },
   },
   {
+    name: 'Seri RLC (az sönümlü basamak yanıtı)',
+    doc: {
+      ...base('Seri RLC Devresi'),
+      components: [
+        { id: 'V1', type: 'V', x: 4, y: 8, rot: 90, params: { mode: 'STEP', value: 0, w0: 0, w1: 10, td: 0, amp: 5, freq: 1000, phase: 0 } },
+        { id: 'R1', type: 'R', x: 9, y: 4, rot: 0, params: { value: 100 } },
+        { id: 'L1', type: 'L', x: 15, y: 4, rot: 0, params: { value: 10e-3, i0: 0 } },
+        { id: 'C1', type: 'C', x: 20, y: 8, rot: 90, params: { value: 1e-6, v0: 0 } },
+        { id: 'GND1', type: 'GND', x: 4, y: 12, rot: 0, params: {} },
+      ],
+      wires: [
+        { id: 'w1', from: [4, 6], to: [4, 4] },
+        { id: 'w2', from: [4, 4], to: [7, 4] },
+        { id: 'w3', from: [11, 4], to: [13, 4] },
+        { id: 'w4', from: [17, 4], to: [20, 4] },
+        { id: 'w5', from: [20, 4], to: [20, 6] },
+        { id: 'w6', from: [4, 10], to: [4, 12] },
+        { id: 'w7', from: [4, 12], to: [20, 12] },
+        { id: 'w8', from: [20, 12], to: [20, 10] },
+      ],
+      analysis: { ...DEFAULT_ANALYSIS, type: 'transient', tStop: 2e-3, method: 'trap' },
+    },
+  },
+  {
     name: 'RL devresi (geçici rejim)',
     doc: {
       ...base('RL Devresi'),

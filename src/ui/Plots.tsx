@@ -2,6 +2,8 @@
 import { Chart, ChartConfiguration } from 'chart.js';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { energyBetween } from '../core/energy';
+import { foEval } from '../solver/methods/firstOrder';
+import { responseEval } from '../solver/methods/secondOrder';
 import { formatEng } from '../core/units';
 import { isStale, useStore } from '../state/store';
 import { bodeConfigs, transientConfigs } from './chartConfig';
@@ -134,7 +136,15 @@ export function Plots() {
   const cfgs = useMemo(() => {
     if (!res || !ids.length) return null;
     if (res.kind === 'transient') {
-      const { v, i } = transientConfigs(res, ids);
+      const resp = res.secondOrder?.response;
+      const st = resp ? res.secondOrder!.analysis.states[resp.index] : undefined;
+      const fo = res.firstOrder;
+      const formula = resp && st
+        ? { id: st.id, kind: st.kind === 'C' ? ('V' as const) : ('I' as const), f: (t: number) => responseEval(resp, t) }
+        : fo?.elem && fo.intervals.every((iv) => iv.model)
+          ? { id: fo.elem, kind: fo.kind === 'C' ? ('V' as const) : ('I' as const), f: (t: number) => { const iv = fo.intervals.find((x) => t >= x.t0 - 1e-15 && t <= x.t1 + 1e-15) ?? fo.intervals[fo.intervals.length - 1]; return foEval(iv, t); } }
+          : undefined;
+      const { v, i } = transientConfigs(res, ids, false, formula);
       return [v, i];
     }
     if (res.kind === 'ac' && res.sweep) {

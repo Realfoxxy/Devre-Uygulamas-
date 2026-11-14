@@ -142,7 +142,8 @@ function baseDisplay(
     { label: 'Akım i(t)', value: formatEng(I, 'A') },
     { label: 'Anlık güç', value: formatEng(P, 'W'), hint: powerHint(P) },
   ];
-  if (res.tau[id] !== undefined) rows.push({ label: 'Zaman sabiti τ', value: formatEng(res.tau[id], 's') });
+  // τ yalnızca birinci derece devrede anlamlı
+  if (res.tau[id] !== undefined && !res.secondOrder) rows.push({ label: 'Zaman sabiti τ', value: formatEng(res.tau[id], 's') });
   return {
     rows,
     cmpV: V,

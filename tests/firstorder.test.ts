@@ -4,6 +4,7 @@ import { AnalysisSettings, DEFAULT_ANALYSIS } from '../src/core/circuit';
 import type { TranResult } from '../src/core/results';
 import { analyze } from '../src/solver/analyze';
 import { parseNetlistText } from '../src/solver/textNetlist';
+import { foEval } from '../src/solver/methods/firstOrder';
 
 const S = (o: Partial<AnalysisSettings> = {}): AnalysisSettings => ({ ...DEFAULT_ANALYSIS, type: 'transient', ...o });
 function tran(text: string, o: Partial<AnalysisSettings> = {}) {
@@ -24,7 +25,7 @@ describe('Anahtarlar ve birinci derece devreler', () => {
     const fo = r.firstOrder!;
     expect(fo.applicable).toBe(true);
     expect(fo.intervals[0].tau).toBeCloseTo(1e-3, 6);
-    expect(fo.intervals[0].evalAt!(1e-3)).toBeCloseTo(10 * (1 - Math.exp(-1)), 3);
+    expect(foEval(fo.intervals[0], 1e-3)).toBeCloseTo(10 * (1 - Math.exp(-1)), 3);
     expect(rel(r.comps.C1.V[at(r, 1e-3)], 6.32)).toBeLessThan(0.01);
     expect(rel(r.comps.C1.V[at(r, 5e-3)], 9.93)).toBeLessThan(0.01);
     expect(fo.intervals[0].formula).toMatch(/v_C1\(t\) = 10\.0 V \+ \(0 V − 10\.0 V\)·e\^\(−t\/1\.00 ms\)/);
@@ -47,7 +48,7 @@ describe('Anahtarlar ve birinci derece devreler', () => {
     expect(fo.intervals).toHaveLength(2);
     expect(fo.intervals[1].t0).toBeCloseTo(1e-3, 12);
     expect(fo.intervals[1].xinf).toBeCloseTo(0, 6);
-    expect(fo.intervals[1].evalAt!(2e-3)).toBeCloseTo(10 * (1 - Math.exp(-1)) * Math.exp(-1), 3);
+    expect(foEval(fo.intervals[1], 2e-3)).toBeCloseTo(10 * (1 - Math.exp(-1)) * Math.exp(-1), 3);
   });
 
   it('4. Bağımlı kaynaklı τ: Aşama 3 Thevenin devresinde a–toprak C = 3 µF → R_th = 1.333 Ω, τ = 4 µs', () => {
@@ -101,5 +102,12 @@ describe('Anahtarlar ve birinci derece devreler', () => {
     const fo = (out.result as TranResult).firstOrder!;
     expect(fo.intervals[0].formula).toMatch(/sin/);
     expect(fo.intervals[0].deviation!).toBeLessThan(0.5);
+  });
+});
+
+describe('Web Worker aktarımı', () => {
+  it('geçici rejim sonucu structuredClone ile kopyalanabilir (fonksiyon içermez)', () => {
+    const out = analyze(parseNetlistText('V1 1 0 DC 10\nSW1 1 2 open 0\nR1 2 3 1k\nC1 3 0 1u'), S({ tStop: 3e-3 }));
+    expect(() => structuredClone(out)).not.toThrow();
   });
 });

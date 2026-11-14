@@ -12,6 +12,7 @@ import { ExtraFields } from './ExtraFields';
 import { SourceFields } from './SourceFields';
 import { TheoremPanel } from './TheoremCard';
 import { FirstOrderCard, InitialTable } from './FirstOrderCard';
+import { SecondOrderCard } from './SecondOrderCard';
 import { KclPanel, KvlPanel, SeriesParallelPanel } from './KirchhoffPanels';
 import { ValueInput } from './ValueInput';
 import { compDisplay, nodeText } from './values';
@@ -221,6 +222,7 @@ function CompResults({ comp }: { comp: Component }) {
       <p className="muted small">Pasif işaret kuralı: akım + uçtan girerse pozitif. Ok, gerçek akım yönünü gösterir.</p>
       <KvlPanel key={comp.id} compId={comp.id} />
       {res.kind === 'transient' && res.firstOrder?.elem === comp.id && <FirstOrderCard />}
+      {res.kind === 'transient' && res.secondOrder?.analysis.states.some((x) => x.id === comp.id) && <SecondOrderCard />}
       <Measured comp={comp} res={res} />
     </div>
   );
@@ -252,6 +254,7 @@ function Summary() {
   return (
     <div className={`summary ${isStale(s) ? 'stale' : ''}`}>
       <FirstOrderCard />
+      <SecondOrderCard />
       <InitialTable />
       <div className="panel-title">Düğüm gerilimleri</div>
       <table className="kv">
