@@ -13,7 +13,7 @@ export interface SPResult {
 const UNIT: Record<string, string> = { R: 'Ω', C: 'F', L: 'H', V: 'V', I: 'A' };
 
 function degree(nl: Netlist, node: number) {
-  return nl.elements.filter((e) => e.nodes[0] === node || e.nodes[1] === node).length;
+  return nl.elements.filter((e) => e.nodes.includes(node)).length;
 }
 
 /** Seçili elemanlar uç uca bir zincir mi? Öyleyse uç düğümlerini ve sırayı döndürür. */

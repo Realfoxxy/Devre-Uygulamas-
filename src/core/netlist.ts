@@ -16,8 +16,8 @@ import { formatEng } from './units';
 export interface NetElement {
   id: string;
   type: Exclude<CompType, 'GND'>;
-  /** [düğüm+, düğüm−]; 0 = toprak */
-  nodes: [number, number];
+  /** Pin düğümleri (iki uçlularda [düğüm+, düğüm−]; üç uçlularda pin sırasıyla); 0 = toprak */
+  nodes: number[];
   params: Params;
 }
 
@@ -138,7 +138,7 @@ export function buildNetlist(components: Component[], wires: Wire[]): Netlist {
   for (const c of components) {
     if (c.type === 'GND') continue;
     const n = pinNodes[c.id];
-    elements.push({ id: c.id, type: c.type, nodes: [n[0], n[1]], params: { ...c.params } });
+    elements.push({ id: c.id, type: c.type, nodes: [...n], params: { ...c.params } });
   }
   if (elements.length === 0) {
     issues.push({ level: 'error', message: 'Devre boş: önce bileşen ekleyin.', compIds: [] });
@@ -265,7 +265,7 @@ export function netlistText(nl: Netlist): string {
           val = '(ampermetre)';
           break;
       }
-      return `${e.id.padEnd(5)} ${String(e.nodes[0]).padStart(2)} ${String(e.nodes[1]).padStart(2)}  ${val}`;
+      return `${e.id.padEnd(5)} ${e.nodes.map((n) => String(n).padStart(2)).join(' ')}  ${val}`;
     })
     .join('\n');
 }
