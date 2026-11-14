@@ -1,7 +1,7 @@
 // Üst menü ve araç çubuğu: Dosya, analiz türü ve ayarları, Çalıştır, PDF.
 import { useEffect, useRef, useState } from 'react';
 import type { AnalysisType } from '../core/circuit';
-import { EXAMPLES } from '../core/examples';
+import { BOOK } from '../core/exampleBook';
 import { useStore } from '../state/store';
 import { downloadProject, openProjectFile } from '../storage/project';
 import { ValueInput } from './ValueInput';
@@ -22,11 +22,6 @@ function FileMenu() {
   const ref = useRef<HTMLDivElement>(null);
   useOutside(ref, open, () => setOpen(false));
   const s = useStore();
-  useEffect(() => {
-    const h = () => setOpen(true);
-    window.addEventListener('devre:examples', h);
-    return () => window.removeEventListener('devre:examples', h);
-  }, []);
   const act = (f: () => void) => () => {
     setOpen(false);
     f();
@@ -63,17 +58,49 @@ function FileMenu() {
             Aç… (.devre)
           </button>
           <button onClick={act(() => downloadProject(s.doc))}>Kaydet (.devre indir)</button>
-          <div className="menu-sep">Örnek devreler</div>
-          {EXAMPLES.map((ex) => (
-            <button
-              key={ex.name}
-              onClick={act(() => {
-                s.loadDoc(structuredClone(ex.doc));
-                fit();
-              })}
-            >
-              {ex.name}
-            </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function ExamplesMenu() {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+  useOutside(ref, open, () => setOpen(false));
+  const s = useStore();
+  useEffect(() => {
+    const h = () => setOpen(true);
+    window.addEventListener('devre:examples', h);
+    return () => window.removeEventListener('devre:examples', h);
+  }, []);
+  const groups = [...new Set(BOOK.map((e) => e.group))];
+  return (
+    <div className="menu" ref={ref}>
+      <button className="btn ghost" onClick={() => setOpen(!open)} aria-haspopup="menu">
+        Örnekler ▾
+      </button>
+      {open && (
+        <div className="menu-pop examples-pop" role="menu">
+          {groups.map((g) => (
+            <div key={g}>
+              <div className="menu-sep">{g}</div>
+              {BOOK.filter((e) => e.group === g).map((ex) => (
+                <button
+                  key={ex.name}
+                  className="ex-item"
+                  onClick={() => {
+                    setOpen(false);
+                    s.loadDoc(structuredClone(ex.doc));
+                    s.setExampleTip({ name: ex.name, tip: ex.tip });
+                    setTimeout(() => window.dispatchEvent(new CustomEvent('devre:fit')), 30);
+                  }}
+                >
+                  <span className="ex-name">{ex.name}</span>
+                  <span className="ex-desc">{ex.desc}</span>
+                </button>
+              ))}
+            </div>
           ))}
         </div>
       )}
@@ -236,6 +263,7 @@ export function Toolbar({ onExport, onTogglePalette, onTogglePanel }: { onExport
         <span className="brand-name">Devre Lab</span>
       </div>
       <FileMenu />
+      <ExamplesMenu />
       <TheoremsMenu />
       <div className="tb-group hide-narrow">
         <button className="icon-btn" title="Geri al (Ctrl+Z)" disabled={!s.past.length} onClick={s.undo}>↶</button>

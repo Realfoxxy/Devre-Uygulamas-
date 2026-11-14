@@ -38,11 +38,12 @@ export function validateTopology(nl: Netlist, mode: AnalysisType): Issue[] {
     if (ra === rb) {
       const loop = vt.filter((o) => vpair(o)[0] !== vpair(o)[1] && find(vpair(o)[0]) === ra).map((o) => o.id);
       const hasL = vt.some((o) => o.type === 'L' && loop.includes(o.id));
+      const names = loop.length === 2 ? `${loop[0]} ve ${loop[1]}` : loop.join(', ');
       issues.push({
         level: 'error',
         message:
-          `Çözülemeyen devre: ${loop.join(', ')} bir döngü oluşturuyor ` +
-          `(paralel bağlı gerilim kaynakları / ampermetreler${hasL ? ' — DC’de bobin kısa devre sayılır' : ''}).`,
+          `Çözülemeyen devre: ${names} paralel (bir döngü oluşturuyor). Farklı gerilimdeki ideal kaynaklar paralel olamaz (Bölüm 3.5); ` +
+          `birini kaldırın ya da araya direnç koyun.${hasL ? ' DC analizde bobin kısa devre sayılır.' : ''}`,
         compIds: loop,
       });
     } else parent[ra] = rb;
@@ -85,6 +86,17 @@ export function validateTopology(nl: Netlist, mode: AnalysisType): Issue[] {
   for (let k = 1; k <= nl.nodeCount; k++) if (!seen[k]) bad.push(k);
   if (bad.length) {
     const comps = nl.elements.filter((e) => e.nodes.some((n) => bad.includes(n))).map((e) => e.id);
+    const touching = nl.elements.filter((e) => e.nodes.some((n) => bad.includes(n)));
+    const srcs = touching.filter((e) => e.type === 'I' || e.type === 'G' || e.type === 'F' || e.type === 'TS');
+    if (srcs.length >= 2 && srcs.length === touching.filter((e) => !(e.type === 'VM' && !e.params.real)).length) {
+      const names = srcs.length === 2 ? `${srcs[0].id} ve ${srcs[1].id}` : srcs.map((e) => e.id).join(', ');
+      issues.push({
+        level: 'error',
+        message: `Çözülemeyen devre: ${names} seri. Aynı koldan iki farklı akım geçemez (Bölüm 3.5); birini kaldırın ya da araya direnç koyun.`,
+        compIds: srcs.map((e) => e.id),
+      });
+      return issues;
+    }
     const viaC = mode === 'dc' && nl.elements.some((e) => e.type === 'C' && e.nodes.some((n) => bad.includes(n)));
     const viaI = nl.elements.some((e) => e.type === 'I' && e.nodes.some((n) => bad.includes(n)));
     const reasons = [viaI && 'akım kaynağı', viaC && 'kapasitör (DC’de açık devre)', 'voltmetre']

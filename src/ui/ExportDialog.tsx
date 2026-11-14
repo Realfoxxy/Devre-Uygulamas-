@@ -1,7 +1,59 @@
 // PDF rapor penceresi: başlık bilgileri (hatırlanır), grafik seçimi, sadece şema dışa aktarma.
 import { useState } from 'react';
-import { isStale, useStore } from '../state/store';
+import { AppState, isStale, useStore } from '../state/store';
+import type { ReportSections } from '../report/pdf';
 import { downloadBlob, loadReportHeader, ReportHeader, safeFileName, saveReportHeader } from '../storage/project';
+
+/** Rapor için isteğe bağlı araç bölümleri */
+async function buildSections(st: AppState, want: { node: boolean; mesh: boolean; theorem: boolean; dynamics: boolean }): Promise<ReportSections> {
+  const [{ buildNetlist }, nodal, mesh, th, units, values] = await Promise.all([
+    import('../core/netlist'),
+    import('../solver/methods/nodal'),
+    import('../solver/methods/mesh'),
+    import('../solver/methods/theorems'),
+    import('../core/units'),
+    import('./values'),
+  ]);
+  const nl = buildNetlist(st.doc.components, st.doc.wires);
+  const out: ReportSections = { dynamics: want.dynamics };
+  if (want.node) out.nodeEquations = nodal.nodeEquations(nl);
+  if (want.mesh) out.meshEquations = mesh.meshEquations(st.doc.components, st.doc.wires, nl);
+  const card = st.theorem;
+  if (want.theorem && card) {
+    const mode = st.results?.kind === 'ac' ? { kind: 'ac' as const, freq: st.results.freq } : { kind: 'dc' as const };
+    const ac = mode.kind === 'ac';
+    const zt = (z: { re: number; im: number } | null, u: string) =>
+      !z ? '—' : ac ? values.phasorText(z, u) : units.formatEng(z.re, u);
+    if (card.tool === 'thevenin' || card.tool === 'req') {
+      const r = th.thevenin(nl, card.a, card.b, mode, card.load);
+      const mp = th.maxPower(r);
+      out.thevenin = {
+        a: card.a,
+        b: card.b,
+        Vth: zt(r.Vth, 'V'),
+        IN: zt(r.IN, 'A'),
+        Rth: r.Zth ? (ac ? `${units.formatEng(r.Zth.re, 'Ω')} ${r.Zth.im < 0 ? '−' : '+'} j${units.formatEng(Math.abs(r.Zth.im), 'Ω')}` : units.formatEng(r.Zth.re, 'Ω')) : '∞',
+        notes: r.notes,
+        maxPower: mp.ok ? `P_max = ${units.formatEng(mp.Pmax!, 'W')} (${ac ? 'Z_L = Z_th*' : `R_L = ${units.formatEng(mp.ZL!.re, 'Ω')}`})` : undefined,
+      };
+    } else if (card.tool === 'super') {
+      const r = th.superposition(nl, card.target, mode);
+      if (!('error' in r)) {
+        out.superposition = {
+          target: card.target,
+          head: ['Açık kaynak', `v_${card.target}`, `i_${card.target}`, 'P'],
+          rows: [
+            ...r.rows.map((x) => [x.source!, zt(x.V, 'V'), zt(x.I, 'A'), units.formatEng(x.P, 'W')]),
+            ['Toplam', zt(r.sumV, 'V'), zt(r.sumI, 'A'), units.formatEng(r.sumP, 'W')],
+            ['Tam çözüm', zt(r.full.V, 'V'), zt(r.full.I, 'A'), units.formatEng(r.full.P, 'W')],
+          ],
+          note: 'Gerilim ve akım katkıları toplanır; güç akımın karesiyle orantılı olduğundan süperpozisyonla toplanmaz.',
+        };
+      }
+    }
+  }
+  return out;
+}
 
 export function ExportDialog({ onClose }: { onClose: () => void }) {
   const s = useStore();
@@ -22,7 +74,13 @@ export function ExportDialog({ onClose }: { onClose: () => void }) {
     return [...set];
   })();
   const [plots, setPlots] = useState<string[]>(defaultPlots);
-  const [withSolution, setWithSolution] = useState(s.showSolution);
+  const [withSolution, setWithSolution] = useState(s.showSolution && s.solutionTab === 'mna');
+  const [withNode, setWithNode] = useState(s.showSolution && s.solutionTab === 'node');
+  const [withMesh, setWithMesh] = useState(s.showSolution && s.solutionTab === 'mesh');
+  const theoremUsable = s.theorem && (s.theorem.tool === 'thevenin' || s.theorem.tool === 'req' || s.theorem.tool === 'super');
+  const [withTheorem, setWithTheorem] = useState(!!theoremUsable);
+  const hasDyn = s.results?.kind === 'transient' && !!(s.results.firstOrder?.applicable || s.results.secondOrder?.analysis.ok);
+  const [withDyn, setWithDyn] = useState(true);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
 
@@ -62,6 +120,7 @@ export function ExportDialog({ onClose }: { onClose: () => void }) {
         plotIds: plots,
         includeSolution: withSolution,
         info: st.resultsInfo,
+        sections: await buildSections(st, { node: withNode, mesh: withMesh, theorem: withTheorem, dynamics: withDyn }),
       });
       downloadBlob(doc.output('blob'), `${fileBase}-rapor.pdf`);
       onClose();
@@ -137,6 +196,26 @@ export function ExportDialog({ onClose }: { onClose: () => void }) {
               ))}
             </div>
           </div>
+        )}
+        <label className="check">
+          <input type="checkbox" checked={withNode} onChange={(e) => setWithNode(e.target.checked)} />
+          Düğüm denklemleri
+        </label>
+        <label className="check">
+          <input type="checkbox" checked={withMesh} onChange={(e) => setWithMesh(e.target.checked)} />
+          Çevre denklemleri
+        </label>
+        {theoremUsable && (
+          <label className="check">
+            <input type="checkbox" checked={withTheorem} onChange={(e) => setWithTheorem(e.target.checked)} />
+            Açık teorem kartı ({s.theorem!.tool === 'super' ? 'süperpozisyon' : 'Thevenin / Norton'})
+          </label>
+        )}
+        {hasDyn && (
+          <label className="check">
+            <input type="checkbox" checked={withDyn} onChange={(e) => setWithDyn(e.target.checked)} />
+            Birinci / ikinci derece analiz (formüller, karakteristik denklem)
+          </label>
         )}
         <label className="check">
           <input type="checkbox" checked={withSolution} onChange={(e) => setWithSolution(e.target.checked)} />

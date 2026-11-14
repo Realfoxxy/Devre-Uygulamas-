@@ -66,6 +66,8 @@ export interface AppState {
   pickNodes: { tool: 'thevenin' | 'req'; a: { node: number; pt: Pt } | null } | null;
   /** Süperpozisyonda sıfırlanan kaynaklar (soluk çizilir) */
   dimmed: string[];
+  /** Açılan örneğin "neye bak" ipucu */
+  exampleTip: { name: string; tip: string } | null;
   showNodeLabels: boolean;
   /** Grafikte gösterilen ek bileşenler */
   plotted: string[];
@@ -107,6 +109,7 @@ export interface AppState {
   setTheorem: (t: TheoremCard | null) => void;
   setPickNodes: (p: AppState['pickNodes']) => void;
   setDimmed: (ids: string[]) => void;
+  setExampleTip: (t: AppState['exampleTip']) => void;
   /** Çizimi topluca değiştirir (tek geri alma adımı) */
   replaceCircuit: (components: Component[], wires: Wire[]) => void;
   setShowNodeLabels: (v: boolean) => void;
@@ -172,6 +175,7 @@ export const useStore = create<AppState>((set, get) => {
     theorem: null,
     pickNodes: null,
     dimmed: [],
+    exampleTip: null,
     showNodeLabels: true,
     plotted: [],
     toast: null,
@@ -364,6 +368,8 @@ export const useStore = create<AppState>((set, get) => {
 
     loadDoc: (doc) =>
       set((s) => ({
+        theorem: null,
+        exampleTip: null,
         doc,
         past: [],
         future: [],
@@ -427,6 +433,7 @@ export const useStore = create<AppState>((set, get) => {
     setTheorem: (theorem) => set({ theorem, dimmed: [], pickNodes: null }),
     setPickNodes: (pickNodes) => set({ pickNodes, placing: null, pickCtrlFor: null, tool: 'select' }),
     setDimmed: (dimmed) => set({ dimmed }),
+    setExampleTip: (exampleTip) => set({ exampleTip }),
     replaceCircuit: (components, wires) => commit(() => ({ components, wires })),
     setShowNodeLabels: (showNodeLabels) => set({ showNodeLabels }),
     togglePlotted: (id) =>
